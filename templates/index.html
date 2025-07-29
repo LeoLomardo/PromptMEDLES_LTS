@@ -1,0 +1,116 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Chat Saúde v1.0.0</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  
+</head>
+<body>
+
+  <div class="chat-container">
+    <header class="chat-header">
+      <img src="{{ url_for('static', filename='images/logo1.jpeg') }}" alt="Logo do Chat Saude" class="logo">
+      <h1>Chat Saúde</h1>
+    </header>
+
+    <div id="messages" class="messages">
+      <!-- Mensagens vão sendo appendadas aqui -->
+      <div class="message bot">
+        <span>Olá! Como posso ajudar hoje?</span>
+      </div>
+    </div>
+
+
+  <hr>
+
+    <div class="input-container" style="flex-direction: column;">
+    <input type="text" id="patientId" placeholder="ID do Paciente" style="margin-bottom: 8px; padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius); width: 100%;" />
+    <div style="display: flex; gap: 0.5rem; width: 100%;">
+      <textarea id="prompt" placeholder="Digite sua mensagem..." rows="1" style="flex: 1;"></textarea>
+      <button id="sendBtn">Enviar</button>
+    </div>
+</div>
+
+  <script>
+    const messagesEl = document.getElementById("messages");
+
+    function createMessage(text, who="user") {
+      const div = document.createElement("div");
+      div.className = `message ${who}`;
+      const span = document.createElement("span");
+      span.innerText = text;
+      div.appendChild(span);
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    async function enviarPrompt(texto = null) {
+      const textarea = document.getElementById("prompt");
+      const promptValue = texto !== null ? texto : textarea.value.trim();
+      if (!promptValue) return;
+      textarea.value = "";
+      createMessage(promptValue, "user");
+
+      createMessage("Carregando...", "bot-loading");
+      const res = await fetch("/prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: promptValue })
+      });
+      const data = await res.json();
+      // remove loading
+      const loading = document.querySelector(".bot-loading");
+      if (loading) loading.remove();
+
+      createMessage(data.resposta || "Erro na resposta.", "bot");
+    }
+
+    async function enviarPrompt(texto = null) {
+      const textarea = document.getElementById("prompt");
+      const patientId = document.getElementById("patientId").value.trim();
+      const promptValue = texto !== null ? texto : textarea.value.trim();
+
+      if (!promptValue || !patientId) return;
+
+      textarea.value = "";
+      createMessage(promptValue, "user");
+
+      createMessage("Carregando...", "bot-loading");
+
+      const res = await fetch("/prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: promptValue, patient_id: patientId })
+      });
+
+      const data = await res.json();
+      const loading = document.querySelector(".bot-loading");
+      if (loading) loading.remove();
+
+      createMessage(data.resposta || "Erro na resposta.", "bot");
+}
+
+    document.getElementById("sendBtn")
+      .addEventListener("click", () => enviarPrompt());
+
+    document.getElementById("prompt")
+      .addEventListener("keydown", e => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          enviarPrompt();
+        }
+      });
+
+    document.querySelectorAll(".suggestion")
+      .forEach(btn => {
+        btn.addEventListener("click", () => {
+          const texto = btn.dataset.prompt;
+          enviarPrompt(texto);
+        });
+      });
+  </script>
+</body>
+</html>

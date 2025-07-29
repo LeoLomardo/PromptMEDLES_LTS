@@ -1,0 +1,23 @@
+1-Melhorar interface gráfica
+2-Refinar querys banco de dados
+    2.1-Ele está fazendo as consultas dos pacientes com um problema específico na coluna de "observacao"
+    2.2-banco de dados tem aproximadamente 300000 linhas, entao precisa
+3-Criar prompts pre definidos clicáveis
+4-Fazer com que a ID leia os dados de observacao
+5-Chat tem que ser bonito e deve gerar graficos na imagem
+
+
+
+
+ORDEM DESENVOLVIMENTO:
+    1-Criar o RAG:
+        1.1-Ingest.py com langchain
+        1.2-Conectar com API  da OpenAI e criar o RAG
+
+    2-Criar projeto flask
+        2.1-app.py
+        2.2-index.html
+        2.3-style.css
+
+    3-Conectar tudo e montar o Chat
+        3.1-Arrumar models.py
