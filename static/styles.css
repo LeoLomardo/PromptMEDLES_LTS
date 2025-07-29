@@ -143,3 +143,18 @@ body {
   height: auto;
   margin: 20px auto;
 }
+.logout-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: #c0392b;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.logout-btn:hover {
+  background: #e74c3c;
+}

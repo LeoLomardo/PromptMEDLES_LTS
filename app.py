@@ -11,6 +11,8 @@ import os, traceback
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 app = Flask(__name__)
+app.config['SESSION_PERMANENT'] = False
+
 app.secret_key = os.getenv("SECRET_KEY", "uma-chave-secreta")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -50,13 +52,22 @@ def login():
 
 @app.route('/logout')
 def logout():
-    session.pop('user', None)
+    session.clear()
     return redirect(url_for('login'))
 
 @app.route('/')
 @login_required
 def index():
     return render_template('index.html')
+
+
+#tentativa de bloquear cache do no navegador
+@app.after_request
+def no_cache(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 @app.route('/prompt', methods=['POST'])
 @login_required
