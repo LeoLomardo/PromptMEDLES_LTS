@@ -1,24 +1,65 @@
 #!/usr/bin/env python3
 # -*- coding: ISO-8859-1 -*-
-import os
-import traceback
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, redirect, url_for, session
 from dotenv import load_dotenv
 from openai import OpenAI
+from functools import wraps
 from db.models import buscar_jornada_por_id
+import os, traceback
 
 # Carrega variáveis de ambiente
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "uma-chave-secreta")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
-app = Flask(__name__)
+
+# Carrega usuários válidos a partir do .env
+admin_user = os.getenv("ADMIN_CRED")
+admin_pass = os.getenv("ADMIN_SENHA")
+leo_user = os.getenv("LEO_CRED")
+leo_pass = os.getenv("LEO_SENHA")
+if not admin_user or not admin_pass:
+    raise RuntimeError("ADMIN_CRED ou ADMIN_SENHA não estão definidos no .env")
+
+USERS = {
+    admin_user: admin_pass,
+    leo_user: leo_pass
+}
+
+# Decorator para proteger rotas
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        u = request.form['username']
+        p = request.form['password']
+        if USERS.get(u) == p:
+            session['user'] = u
+            return redirect(url_for('index'))
+        return render_template('login.html', erro="Usuário ou senha inválidos")
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    return redirect(url_for('login'))
 
 @app.route('/')
+@login_required
 def index():
     return render_template('index.html')
 
 @app.route('/prompt', methods=['POST'])
+@login_required
 def handle_prompt():
     data = request.get_json(force=True)
     user_prompt = data.get("prompt", "").strip()
@@ -28,21 +69,16 @@ def handle_prompt():
         return jsonify({"error": "Campos 'prompt' e 'patient_id' são obrigatórios."}), 400
 
     try:
-        # Busca as observações do paciente
         registros = buscar_jornada_por_id(patient_id)
         if not registros:
             return jsonify({"resposta": "Nenhum dado encontrado para o paciente informado."})
 
-        # Opcional: limitar o número de registros se forem muitos
-        registros = registros[-30:]
-
-        # Monta o contexto textual com os dados do paciente
+        registros = registros[-1000:]
         contexto = "\n\n".join([
             f"[{r['data']}] {r['tipo']} - {r['observacao']} (Local: {r['local']}, Profissional: {r['profissional']}, Status: {r['status']}, Fonte: {r['fonte']})"
             for r in registros if r.get("observacao")
         ])
 
-        # Prepara o prompt completo
         prompt_completo = f"""
 Você é um assistente de saúde analisando dados clínicos. Com base nas observações abaixo do paciente de ID {patient_id}, responda à pergunta do usuário.
 
@@ -52,7 +88,6 @@ DADOS DO PACIENTE:
 PERGUNTA: {user_prompt}
         """
 
-        # Chamada direta à OpenAI (modelo GPT-4o ou GPT-3.5-turbo)
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
