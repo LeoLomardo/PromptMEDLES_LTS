@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Chat Saúde v1.0.0</title>
+  <title>Chat Saude v1.0.0</title>
   <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   
@@ -14,11 +14,10 @@
   <div class="chat-container">
     <header class="chat-header">
       <img src="{{ url_for('static', filename='images/logo1.jpeg') }}" alt="Logo do Chat Saude" class="logo">
-      <h1>Chat Saúde</h1>
+      <h1>Chat Saude</h1>
     </header>
 
     <div id="messages" class="messages">
-      <!-- Mensagens vão sendo appendadas aqui -->
       <div class="message bot">
         <span>Olá! Como posso ajudar hoje?</span>
       </div>
