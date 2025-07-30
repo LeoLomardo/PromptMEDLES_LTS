@@ -116,4 +116,4 @@ PERGUNTA: {user_prompt}
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="139.82.24.175", port=5000)
