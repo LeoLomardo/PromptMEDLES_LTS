@@ -86,8 +86,12 @@ def handle_prompt():
 
         registros = registros[-1000:]
         contexto = "\n\n".join([
-            f"[{r['data']}] {r['tipo']} - {r['observacao']} (Local: {r['local']}, Profissional: {r['profissional']}, Status: {r['status']}, Fonte: {r['fonte']})"
-            for r in registros if r.get("observacao")
+            f"[{r['data']}] {r['descricao']} "
+            f"(CPF: {r['cpf']}, Idade: {r['idade']}, "
+            f"Conjunto: {r['conjunto']}, Profissional: {r['nome_profissional']}, "
+            f"Convênio: {r['nome_convenio']}, Fonte: {r['fonte']})"
+            f"Data de Nascimento: {r['data_nascimento']}"
+            for r in registros if r.get("descricao")
         ])
 
         prompt_completo = f"""
@@ -116,4 +120,4 @@ PERGUNTA: {user_prompt}
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host="139.82.24.175", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000)

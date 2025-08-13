@@ -85,9 +85,9 @@ def stream_observacoes(batch_size: int = 1000):
 def buscar_jornada_por_id(patient_id: str):
     with engine.connect() as conn:
         result = conn.execute(text("""
-            SELECT data, observacao, tipo, local, profissional, status, fonte
-            FROM mpi_jornada_paciente.mpi_jornada_paciente
-            WHERE patient_mpi_id = :pid
+            SELECT *
+            FROM mpi.mpi_jornada_paciete  
+            WHERE mpi = :pid
             ORDER BY data ASC
         """), {"pid": patient_id}).fetchall()
         return [dict(row._mapping) for row in result]
