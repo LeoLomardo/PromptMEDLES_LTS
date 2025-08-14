@@ -158,3 +158,63 @@ body {
 .logout-btn:hover {
   background: #e74c3c;
 }
+
+.message.bot h1,
+.message.bot h2,
+.message.bot h3 {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.message.bot p {
+  margin-bottom: 0.8em;
+}
+
+/* Remove a margem do último parágrafo para não criar espaço extra */
+.message.bot p:last-child {
+  margin-bottom: 0;
+}
+
+.message.bot ul,
+.message.bot ol {
+  padding-left: 1.5em; /* Adiciona indentação para a lista */
+  margin-bottom: 0.8em;
+}
+
+.message.bot li {
+  margin-bottom: 0.4em; /* Espaçamento entre itens da lista */
+}
+
+.message.bot strong {
+  font-weight: 600; /* Deixa o negrito um pouco mais forte */
+}
+
+.message.bot code {
+  font-family: "Courier New", Courier, monospace;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.message.bot pre {
+  background-color: #2d2d2d;
+  color: #f1f1f1;
+  padding: 1em;
+  border-radius: 8px;
+  overflow-x: auto; 
+  margin-bottom: 1em;
+}
+
+.message.bot pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.message.bot blockquote {
+  border-left: 4px solid var(--border);
+  padding-left: 1em;
+  margin-left: 0;
+  color: var(--muted);
+  font-style: italic;
+}

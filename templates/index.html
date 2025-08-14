@@ -1,4 +1,3 @@
-<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -7,7 +6,7 @@
   <title>Chat Saude v1.0.0</title>
   <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-  
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
 
@@ -19,7 +18,7 @@
 
     <div id="messages" class="messages">
       <div class="message bot">
-        <span>Olá! Como posso ajudar hoje?</span>
+        <span>Ola! Como posso ajudar hoje?</span>
       </div>
     </div>
 
@@ -37,61 +36,69 @@
   <script>
     const messagesEl = document.getElementById("messages");
 
-    function createMessage(text, who="user") {
+    function createMessage(text, who = "user") {
       const div = document.createElement("div");
       div.className = `message ${who}`;
-      const span = document.createElement("span");
-      span.innerText = text;
-      div.appendChild(span);
+
+      if (who === "bot") {
+
+        div.innerHTML = marked.parse(text);
+      } else {
+        const span = document.createElement("span");
+        span.innerText = text;
+        div.appendChild(span);
+      }
+      
       messagesEl.appendChild(div);
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    async function enviarPrompt(texto = null) {
-      const textarea = document.getElementById("prompt");
-      const promptValue = texto !== null ? texto : textarea.value.trim();
-      if (!promptValue) return;
-      textarea.value = "";
-      createMessage(promptValue, "user");
-
-      createMessage("Carregando...", "bot-loading");
-      const res = await fetch("/prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: promptValue })
-      });
-      const data = await res.json();
-      // remove loading
-      const loading = document.querySelector(".bot-loading");
-      if (loading) loading.remove();
-
-      createMessage(data.resposta || "Erro na resposta.", "bot");
-    }
 
     async function enviarPrompt(texto = null) {
       const textarea = document.getElementById("prompt");
       const patientId = document.getElementById("patientId").value.trim();
       const promptValue = texto !== null ? texto : textarea.value.trim();
 
-      if (!promptValue || !patientId) return;
+      if (!promptValue || !patientId) {
+        if (!patientId) alert("Por favor, insira o ID do Paciente.");
+        if (!promptValue) alert("Por favor, digite uma pergunta.");
+        return;
+      }
 
       textarea.value = "";
       createMessage(promptValue, "user");
 
-      createMessage("Carregando...", "bot-loading");
+      const loadingDiv = document.createElement("div");
+      loadingDiv.className = "message bot-loading";
+      loadingDiv.innerHTML = "<span>Carregando...</span>";
+      messagesEl.appendChild(loadingDiv);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
 
-      const res = await fetch("/prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: promptValue, patient_id: patientId })
-      });
 
-      const data = await res.json();
-      const loading = document.querySelector(".bot-loading");
-      if (loading) loading.remove();
+      try {
+        const res = await fetch("/prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: promptValue, patient_id: patientId })
+        });
 
-      createMessage(data.resposta || "Erro na resposta.", "bot");
-}
+        const data = await res.json();
+        
+        const loading = document.querySelector(".bot-loading");
+        if (loading) loading.remove();
+
+        if (res.ok) {
+            createMessage(data.resposta || "Nao foi possivel obter uma resposta.", "bot");
+        } else {
+            createMessage(data.error || "Ocorreu um erro no servidor.", "bot");
+        }
+
+      } catch (error) {
+        const loading = document.querySelector(".bot-loading");
+        if (loading) loading.remove();
+        createMessage("Erro ao conectar com o servidor. Verifique sua conexao.", "bot");
+      }
+    }
 
     document.getElementById("sendBtn")
       .addEventListener("click", () => enviarPrompt());
@@ -102,14 +109,6 @@
           e.preventDefault();
           enviarPrompt();
         }
-      });
-
-    document.querySelectorAll(".suggestion")
-      .forEach(btn => {
-        btn.addEventListener("click", () => {
-          const texto = btn.dataset.prompt;
-          enviarPrompt(texto);
-        });
       });
   </script>
 </body>
