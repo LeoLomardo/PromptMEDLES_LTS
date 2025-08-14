@@ -7,8 +7,8 @@ from functools import wraps
 from db.models import buscar_jornada_por_id
 import os, traceback
 
-# Carrega variáveis de ambiente
 load_dotenv()
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 app = Flask(__name__)
 app.config['SESSION_PERMANENT'] = False
@@ -89,6 +89,7 @@ def handle_prompt():
             f"[{r['data_registro']}] {r['descricao']} "
             f"(CPF: {r['cpf']}, Idade: {r['idade']}, "
             f"Conjunto: {r['conjunto']}, Profissional: {r['nome_profissional']}, "
+            f"Convênio: {r['nome_convenio']}, Fonte: {r['fonte']})"
             f"Data de Nascimento: {r['data_nascimento']}"
             for r in registros if r.get("descricao")
         ])
