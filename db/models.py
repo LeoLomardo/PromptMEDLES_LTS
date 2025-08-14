@@ -88,6 +88,6 @@ def buscar_jornada_por_id(patient_id: str):
             SELECT *
             FROM mpi.mpi_jornada_paciete  
             WHERE mpi = :pid
-            ORDER BY data ASC
+            ORDER BY mpi ASC
         """), {"pid": patient_id}).fetchall()
         return [dict(row._mapping) for row in result]

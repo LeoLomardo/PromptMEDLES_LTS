@@ -86,10 +86,9 @@ def handle_prompt():
 
         registros = registros[-1000:]
         contexto = "\n\n".join([
-            f"[{r['data']}] {r['descricao']} "
+            f"[{r['data_registro']}] {r['descricao']} "
             f"(CPF: {r['cpf']}, Idade: {r['idade']}, "
             f"Conjunto: {r['conjunto']}, Profissional: {r['nome_profissional']}, "
-            f"Convênio: {r['nome_convenio']}, Fonte: {r['fonte']})"
             f"Data de Nascimento: {r['data_nascimento']}"
             for r in registros if r.get("descricao")
         ])
