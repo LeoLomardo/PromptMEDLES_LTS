@@ -218,3 +218,31 @@ body {
   color: var(--muted);
   font-style: italic;
 }
+
+.plot-button {
+  background: #2abe6a; /* Um verde para indicar ação positiva */
+  border: none;
+  color: #c51414;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: opacity 0.2s;
+  margin-top: 0.5rem; /* Espaço entre o código e o botão */
+  display: block; /* Faz o botão ocupar a linha */
+}
+
+.plot-button:hover {
+  opacity: 0.9;
+}
+
+.plot-button:disabled {
+  background: #068c96;
+  cursor: not-allowed;
+}
+
+.message.bot img {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 1rem;
+}

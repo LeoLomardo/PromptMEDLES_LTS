@@ -41,8 +41,57 @@
       div.className = `message ${who}`;
 
       if (who === "bot") {
-
         div.innerHTML = marked.parse(text);
+        
+   
+        const codeBlock = div.querySelector('pre code.language-python');
+        if (codeBlock) {
+          const plotButton = document.createElement('button');
+          plotButton.innerText = 'Gerar Grafico';
+          plotButton.className = 'plot-button'; 
+          
+          codeBlock.parentElement.insertAdjacentElement('afterend', plotButton);
+
+          plotButton.addEventListener('click', async () => {
+              const code = codeBlock.innerText;
+              plotButton.innerText = 'Gerando...';
+              plotButton.disabled = true;
+
+              try {
+                  const res = await fetch('/plot', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ code: code })
+                  });
+                  
+                  const data = await res.json();
+
+                  if (res.ok) {
+                      const img = document.createElement('img');
+                      img.src = `data:image/png;base64,${data.image_base64}`;
+                      img.alt = "Grafico Gerado";
+                      img.style.maxWidth = '100%';
+                      img.style.marginTop = '1rem';
+                      
+                      plotButton.insertAdjacentElement('afterend', img);
+                      plotButton.style.display = 'none'; 
+                  } else {
+                      const errorSpan = document.createElement('span');
+                      errorSpan.style.color = 'red';
+                      errorSpan.style.display = 'block';
+                      errorSpan.style.marginTop = '0.5rem';
+                      errorSpan.innerText = `Erro: ${data.error || 'Nao foi possivel gerar o grafico.'}`;
+                      plotButton.insertAdjacentElement('afterend', errorSpan);
+                      plotButton.innerText = 'Tentar Novamente';
+                      plotButton.disabled = false;
+                  }
+              } catch (error) {
+                  console.error("Erro no fetch do plot:", error);
+                  plotButton.innerText = 'Erro de Conexao';
+              }
+          });
+        }
+
       } else {
         const span = document.createElement("span");
         span.innerText = text;

@@ -7,6 +7,14 @@ from functools import wraps
 from db.models import buscar_jornada_por_id
 import os, traceback
 
+# --- NOVAS IMPORTAÇÕES ---
+import io
+import base64
+import matplotlib
+matplotlib.use('Agg') # Importante: usa um backend não-interativo para o Matplotlib
+import matplotlib.pyplot as plt
+from collections import Counter # A IA pode usar, então disponibilizamos
+
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -95,7 +103,9 @@ def handle_prompt():
         ])
 
         prompt_completo = f"""
-Você é um assistente de saúde analisando dados clínicos. Com base nas observações abaixo do paciente de ID {patient_id}, responda à pergunta do usuário.
+Você é um assistente de saúde analisando dados clínicos. Com base nas observações abaixo do paciente de ID {patient_id}, responda à pergunta do usuário. 
+Apenas quando o usuário explicitamente solicitat um gráfico, gere um código em Python para plotá-lo.
+IMPORTANTE: Gere APENAS o corpo do código, sem incluir `import matplotlib.pyplot as plt` ou `from collections import Counter`. As variáveis `plt` e `Counter` já estarão disponíveis para uso direto no seu código.
 
 DADOS DO PACIENTE:
 {contexto}
@@ -118,6 +128,55 @@ PERGUNTA: {user_prompt}
     except Exception as e:
         print("Erro completo:", traceback.format_exc())
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500
+
+# --- NOVA ROTA PARA GERAR O GRÁFICO ---
+@app.route('/plot', methods=['POST'])
+@login_required
+def plot_graph():
+    data = request.get_json(force=True)
+    code = data.get('code')
+
+    if not code:
+        return jsonify({"error": "Nenhum código fornecido."}), 400
+
+    try:
+        # Ambiente seguro para execução
+        safe_globals = {
+            'plt': plt,
+            'Counter': Counter,
+            '__builtins__': {
+                'print': print,
+                'list': list,
+                'dict': dict,
+                'str': str,
+                'int': int,
+                'float': float,
+                'len': len
+             }
+        }
+        
+        # Limpa qualquer figura anterior
+        plt.clf()
+
+        # Executa o código fornecido
+        exec(code, safe_globals)
+
+        # Salva o gráfico em um buffer de memória
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight')
+        buf.seek(0)
+
+        # Codifica a imagem em Base64 para enviar via JSON
+        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        
+        buf.close()
+
+        return jsonify({"image_base64": image_base64})
+
+    except Exception as e:
+        print("Erro ao executar código do gráfico:", traceback.format_exc())
+        return jsonify({"error": f"Erro ao gerar o gráfico: {str(e)}"}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port=5000)
