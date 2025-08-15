@@ -1,8 +1,8 @@
-# Chat Saúde - Flask & OpenAI Medical Data Assistant
+# Chat SaÃºde - Flask & OpenAI Medical Data Assistant
 
 ## 1. Overview
 
-**Chat Saúde** is a web-based application built with Flask that serves as an intelligent medical data assistant. It provides a chat interface for healthcare professionals to query a patient's clinical journey using natural language.
+**Chat SaÃºde** is a web-based application built with Flask that serves as an intelligent medical data assistant. It provides a chat interface for healthcare professionals to query a patient's clinical journey using natural language.
 
 The application leverages the OpenAI API to undesrtand user questions, analyze patient data retrieved from a PostgreSQL database, and provide answers. One nice feature is it's able to generate Python code for data visualizations on the fly and render the resulting plots directly within the chat interface.
 
@@ -19,18 +19,18 @@ The application leverages the OpenAI API to undesrtand user questions, analyze p
 
 ```
 .
-??? static/
-?   ??? styles.css        # Frontend styling
-?   ??? images/
-?       ??? logo1.jpeg    # Application logo
-??? templates/
-?   ??? index.html        # Main chat page
-?   ??? login.html        # Login page
-|?? db/
-|   ??? models.py                # Main Flask application, routes, and logic
-??? app.py             # Database connection and query logic
-??? .env                  # File for environment variables (credentials)
-??? requirements.txt      # Python dependencies
+|-- static/
+|   |- styles.css        # Frontend styling
+|   |-- images/
+|       |-- logo1.jpeg    # Application logo
+|-- templates/
+|   |-- index.html        # Main chat page
+|   |-- login.html        # Login page
+|-- db/
+|   |-- models.py                # Main Flask application, routes, and logic
+|-- app.py             # Database connection and query logic
+|-- .env                  # File for environment variables (credentials)
+|-- requirements.txt      # Python dependencies
 ```
 
 ## 4. Setup and Installation
