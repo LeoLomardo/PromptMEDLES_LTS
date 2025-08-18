@@ -4,10 +4,9 @@ from flask import Flask, request, render_template, jsonify, redirect, url_for, s
 from dotenv import load_dotenv
 from openai import OpenAI
 from functools import wraps
-from db.models import buscar_jornada_por_id
+from db.models import buscar_jornada_por_id, filtrar_pacientes_por_idade
 import os, traceback
 
-# --- NOVAS IMPORTAÇÕES ---
 import io
 import base64
 import matplotlib
@@ -177,6 +176,38 @@ def plot_graph():
         print("Erro ao executar código do gráfico:", traceback.format_exc())
         return jsonify({"error": f"Erro ao gerar o gráfico: {str(e)}"}), 500
 
+
+
+@app.route('/filter', methods=['POST'])
+@login_required
+def filter_patients():
+    data = request.get_json()
+    if not data or 'idade_min' not in data or 'idade_max' not in data:
+        return jsonify({"error": "Intervalo de idade não fornecido."}), 400
+
+    try:
+        idade_min = int(data['idade_min'])
+        idade_max = int(data['idade_max'])
+
+        pacientes_encontrados = filtrar_pacientes_por_idade(idade_min, idade_max)
+        
+        if not pacientes_encontrados:
+            resposta = f"Nenhum paciente encontrado com idade entre {idade_min} e {idade_max} anos."
+        else:
+            resposta = f"### Pacientes Encontrados (entre {idade_min} e {idade_max} anos):\n\n"
+            resposta += "| ID Paciente(MPI) | Idade |\n"
+            resposta += "|----------------------|-------------------|\n"
+            for paciente in pacientes_encontrados:
+                
+                resposta += f"| {paciente['mpi']} | {int(paciente['idade_calculada'])} |\n"
+        
+        return jsonify({"resposta": resposta})
+
+    except (ValueError, TypeError):
+        return jsonify({"error": "Valores de idade inválidos. Por favor, insira apenas números."}), 400
+    except Exception as e:
+        print("Erro completo no filtro:", traceback.format_exc())
+        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port=5000)

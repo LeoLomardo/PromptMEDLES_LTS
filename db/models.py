@@ -20,3 +20,27 @@ def buscar_jornada_por_id(patient_id: str):
             ORDER BY mpi ASC
         """), {"pid": patient_id}).fetchall()
         return [dict(row._mapping) for row in result]
+
+
+#funcao filtra pacientes apenas considerando intervalo de idade, atualmente ele ordena pelo mpi, mas pode mudar pro q julgarem mais valido.
+def filtrar_pacientes_por_idade(idade_min: int, idade_max: int):
+    with engine.connect() as conn:
+       
+        query = text("""
+            SELECT
+                mpi,
+                EXTRACT(YEAR FROM AGE(NOW(), data_nascimento)) AS idade_calculada
+            FROM
+                mpi.mpi_jornada_paciete
+            WHERE
+                data_nascimento IS NOT NULL
+            GROUP BY
+                mpi, data_nascimento
+            HAVING
+                EXTRACT(YEAR FROM AGE(NOW(), data_nascimento)) BETWEEN :idade_min AND :idade_max
+            ORDER BY
+                mpi;
+        """)
+        
+        result = conn.execute(query, {"idade_min": idade_min, "idade_max": idade_max}).fetchall()
+        return [dict(row._mapping) for row in result]

@@ -21,3 +21,10 @@ ORDEM DESENVOLVIMENTO:
 
     3-Conectar tudo e montar o Chat
         3.1-Arrumar models.py
+
+
+
+1-gerar CSV, JSON, , ate mesmo HTML ETC...
+2- adicionar diferentes filtros de busca de pacientes
+3- fazer lista de perguntas padrao, criando um log de perguntas anteriores feitas. 
+    |-everybody likes google book

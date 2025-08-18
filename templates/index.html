@@ -18,20 +18,25 @@
 
     <div id="messages" class="messages">
       <div class="message bot">
-        <span>Ola! Como posso ajudar hoje?</span>
+        <span>Ola! Para consultas detalhadas, insira um ID de paciente e sua pergunta. Para listar pacientes, use os filtros abaixo.</span>
       </div>
     </div>
 
-
-  <hr>
+    <div class="filter-container">
+        <input type="number" id="idadeMin" placeholder="Idade Minima" />
+        <input type="number" id="idadeMax" placeholder="Idade Maxima" />
+        <button id="filterBtn">Filtrar Pacientes</button>
+    </div>
+    <hr>
 
     <div class="input-container" style="flex-direction: column;">
-    <input type="text" id="patientId" placeholder="ID do Paciente" style="margin-bottom: 8px; padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius); width: 100%;" />
-    <div style="display: flex; gap: 0.5rem; width: 100%;">
-      <textarea id="prompt" placeholder="Digite sua mensagem..." rows="1" style="flex: 1;"></textarea>
-      <button id="sendBtn">Enviar</button>
+      <input type="text" id="patientId" placeholder="ID do Paciente (para consultas com IA)" style="margin-bottom: 8px; padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius); width: 100%;" />
+      <div style="display: flex; gap: 0.5rem; width: 100%;">
+        <textarea id="prompt" placeholder="Digite sua pergunta para o paciente selecionado..." rows="1" style="flex: 1;"></textarea>
+        <button id="sendBtn">Enviar</button>
+      </div>
     </div>
-</div>
+  </div>
 
   <script>
     const messagesEl = document.getElementById("messages");
@@ -148,7 +153,48 @@
         createMessage("Erro ao conectar com o servidor. Verifique sua conexao.", "bot");
       }
     }
+    document.getElementById("filterBtn").addEventListener("click", filtrarPacientes);
 
+    async function filtrarPacientes() {
+      const idadeMin = document.getElementById("idadeMin").value;
+      const idadeMax = document.getElementById("idadeMax").value;
+
+      if (!idadeMin || !idadeMax) {
+        alert("Por favor, preencha a idade minima e maxima para filtrar.");
+        return;
+      }
+
+      createMessage(`Buscando pacientes com idade entre ${idadeMin} e ${idadeMax} anos.`, "user");
+
+      const loadingDiv = document.createElement("div");
+      loadingDiv.className = "message bot-loading";
+      loadingDiv.innerHTML = "<span>Filtrando...</span>";
+      messagesEl.appendChild(loadingDiv);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      try {
+        const res = await fetch("/filter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idade_min: parseInt(idadeMin), idade_max: parseInt(idadeMax) })
+        });
+
+        const data = await res.json();
+        
+        const loading = document.querySelector(".bot-loading");
+        if (loading) loading.remove();
+
+        if (res.ok) {
+            createMessage(data.resposta, "bot");
+        } else {
+            createMessage(data.error || "Ocorreu um erro no servidor.", "bot");
+        }
+      } catch (error) {
+        const loading = document.querySelector(".bot-loading");
+        if (loading) loading.remove();
+        createMessage("Erro ao conectar com o servidor. Verifique sua conexao.", "bot");
+      }
+    }
     document.getElementById("sendBtn")
       .addEventListener("click", () => enviarPrompt());
 
