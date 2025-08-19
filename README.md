@@ -66,20 +66,9 @@ It is highly recommended to use a virtual environment to manage project dependen
     .venv\Scripts\activate
     ```
 
-### 4.4. Create a `requirements.txt` File
 
-Create a file named `requirements.txt` in the root of your project and add the following dependencies:
 
-```
-Flask==2.3.2
-openai==1.14.3
-python-dotenv==1.0.0
-SQLAlchemy==2.0.25
-psycopg2-binary==2.9.9
-matplotlib==3.7.1
-```
-
-### 4.5. Install Dependencies
+### 4.4. Install Dependencies
 
 Install all the required packages using pip:
 
@@ -87,7 +76,7 @@ Install all the required packages using pip:
 pip install -r requirements.txt
 ```
 
-### 4.6. Set Up Environment Variables
+### 4.5. Set Up Environment Variables
 
 The application requires a `.env` file in the project root to store sensitive credentials securely.
 
