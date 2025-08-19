@@ -10,10 +10,11 @@ import os, traceback
 import io
 import base64
 import matplotlib
-matplotlib.use('Agg') # Importante: usa um backend não-interativo para o Matplotlib
+matplotlib.use('Agg') # Importante: usa um backend nao-interativo para o Matplotlib
 import matplotlib.pyplot as plt
-from collections import Counter # A IA pode usar, então disponibilizamos
-
+from collections import Counter # A IA pode usar, entao disponibilizamos
+import pandas as pd
+from datetime import datetime
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -24,13 +25,13 @@ app.secret_key = os.getenv("SECRET_KEY", "uma-chave-secreta")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Carrega usuários válidos a partir do .env
+# Carrega usuarios validos a partir do .env
 admin_user = os.getenv("ADMIN_CRED")
 admin_pass = os.getenv("ADMIN_SENHA")
 leo_user = os.getenv("LEO_CRED")
 leo_pass = os.getenv("LEO_SENHA")
 if not admin_user or not admin_pass:
-    raise RuntimeError("ADMIN_CRED ou ADMIN_SENHA não estão definidos no .env")
+    raise RuntimeError("ADMIN_CRED ou ADMIN_SENHA nao estao definidos no .env")
 
 USERS = {
     admin_user: admin_pass,
@@ -54,7 +55,7 @@ def login():
         if USERS.get(u) == p:
             session['user'] = u
             return redirect(url_for('index'))
-        return render_template('login.html', erro="Usuário ou senha inválidos")
+        return render_template('login.html', erro="Usuario ou senha invalidos")
     return render_template('login.html')
 
 @app.route('/logout')
@@ -84,7 +85,7 @@ def handle_prompt():
     patient_id = data.get("patient_id", "").strip()
 
     if not user_prompt or not patient_id:
-        return jsonify({"error": "Campos 'prompt' e 'patient_id' são obrigatórios."}), 400
+        return jsonify({"error": "Campos 'prompt' e 'patient_id' sao obrigatorios."}), 400
 
     try:
         registros = buscar_jornada_por_id(patient_id)
@@ -96,15 +97,15 @@ def handle_prompt():
             f"[{r['data_registro']}] {r['descricao']} "
             f"(CPF: {r['cpf']}, Idade: {r['idade']}, "
             f"Conjunto: {r['conjunto']}, Profissional: {r['nome_profissional']}, "
-            f"Convênio: {r['nome_convenio']}, Fonte: {r['fonte']})"
+            f"Convenio: {r['nome_convenio']}, Fonte: {r['fonte']})"
             f"Data de Nascimento: {r['data_nascimento']}"
             for r in registros if r.get("descricao")
         ])
 
         prompt_completo = f"""
-Você é um assistente de saúde analisando dados clínicos. Com base nas observações abaixo do paciente de ID {patient_id}, responda à pergunta do usuário. 
-Apenas quando o usuário explicitamente solicitat um gráfico, gere um código em Python para plotá-lo.
-IMPORTANTE: Gere APENAS o corpo do código, sem incluir `import matplotlib.pyplot as plt` ou `from collections import Counter`. As variáveis `plt` e `Counter` já estarão disponíveis para uso direto no seu código.
+Voce e um assistente de saude analisando dados clinicos. Com base nas observacoes abaixo do paciente de ID {patient_id}, responda a pergunta do usuario. 
+Apenas quando o usuario explicitamente solicitat um grafico, gere um codigo em Python para plota-lo.
+IMPORTANTE: Gere APENAS o corpo do codigo, sem incluir `import matplotlib.pyplot as plt` ou `from collections import Counter`. As variaveis `plt` e `Counter` ja estarao disponiveis para uso direto no seu codigo.
 
 DADOS DO PACIENTE:
 {contexto}
@@ -115,7 +116,7 @@ PERGUNTA: {user_prompt}
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Você é um assistente médico que analisa prontuários clínicos e responde perguntas com base em observações do paciente."},
+                {"role": "system", "content": "Voce e um assistente medico que analisa prontuarios clinicos e responde perguntas com base em observacaes do paciente."},
                 {"role": "user", "content": prompt_completo}
             ],
             temperature=0.2
@@ -128,7 +129,7 @@ PERGUNTA: {user_prompt}
         print("Erro completo:", traceback.format_exc())
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500
 
-# --- NOVA ROTA PARA GERAR O GRÁFICO ---
+# --- NOVA ROTA PARA GERAR O GRFICO ---
 @app.route('/plot', methods=['POST'])
 @login_required
 def plot_graph():
@@ -136,31 +137,47 @@ def plot_graph():
     code = data.get('code')
 
     if not code:
-        return jsonify({"error": "Nenhum código fornecido."}), 400
+        return jsonify({"error": "Nenhum codigo fornecido."}), 400
 
     try:
-        # Ambiente seguro para execução
+        # Ambiente seguro para execucao
         safe_globals = {
-            'plt': plt,
-            'Counter': Counter,
-            '__builtins__': {
-                'print': print,
-                'list': list,
-                'dict': dict,
-                'str': str,
-                'int': int,
-                'float': float,
-                'len': len
-             }
+            "__builtins__": {
+                "print": print,
+                "len": len,
+                "range": range,
+                "min": min,
+                "max": max,
+                "sum": sum,
+                "abs": abs,
+                "round": round,
+                "sorted": sorted,
+                "list": list,
+                "dict": dict,
+                "set": set,
+                "tuple": tuple,
+                "str": str,
+                "int": int,
+                "float": float,
+                "bool": bool,
+                "enumerate": enumerate,
+                "zip": zip,
+            },
+            "plt": plt,
+            "pd": pd,
+            "Counter": Counter,
+            "datetime": datetime,
+            "force_series": None,
+            "to_datetime_series": None,
+            "DTSAFE": None,
+            "count_by_month": None,
+            "ensure_figure": None,
         }
         
-        # Limpa qualquer figura anterior
         plt.clf()
 
-        # Executa o código fornecido
         exec(code, safe_globals)
 
-        # Salva o gráfico em um buffer de memória
         buf = io.BytesIO()
         plt.savefig(buf, format='png', bbox_inches='tight')
         buf.seek(0)
@@ -173,8 +190,8 @@ def plot_graph():
         return jsonify({"image_base64": image_base64})
 
     except Exception as e:
-        print("Erro ao executar código do gráfico:", traceback.format_exc())
-        return jsonify({"error": f"Erro ao gerar o gráfico: {str(e)}"}), 500
+        print("Erro ao executar codigo do grafico:", traceback.format_exc())
+        return jsonify({"error": f"Erro ao gerar o grafico: {str(e)}"}), 500
 
 
 
@@ -183,7 +200,7 @@ def plot_graph():
 def filter_patients():
     data = request.get_json()
     if not data or 'idade_min' not in data or 'idade_max' not in data:
-        return jsonify({"error": "Intervalo de idade não fornecido."}), 400
+        return jsonify({"error": "Intervalo de idade nao fornecido."}), 400
 
     try:
         idade_min = int(data['idade_min'])
@@ -204,7 +221,7 @@ def filter_patients():
         return jsonify({"resposta": resposta})
 
     except (ValueError, TypeError):
-        return jsonify({"error": "Valores de idade inválidos. Por favor, insira apenas números."}), 400
+        return jsonify({"error": "Valores de idade invalidos. Por favor, insira apenas numeros."}), 400
     except Exception as e:
         print("Erro completo no filtro:", traceback.format_exc())
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500

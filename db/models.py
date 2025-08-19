@@ -15,7 +15,7 @@ def buscar_jornada_por_id(patient_id: str):
     with engine.connect() as conn:
         result = conn.execute(text("""
             SELECT *
-            FROM mpi.mpi_jornada_paciete  
+            FROM mpi.mpi_jornada_paciete_teste  
             WHERE mpi = :pid
             ORDER BY mpi ASC
         """), {"pid": patient_id}).fetchall()
@@ -31,7 +31,7 @@ def filtrar_pacientes_por_idade(idade_min: int, idade_max: int):
                 mpi,
                 EXTRACT(YEAR FROM AGE(NOW(), data_nascimento)) AS idade_calculada
             FROM
-                mpi.mpi_jornada_paciete
+                mpi.mpi_jornada_paciete_teste
             WHERE
                 data_nascimento IS NOT NULL
             GROUP BY

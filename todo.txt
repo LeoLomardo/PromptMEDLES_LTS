@@ -28,3 +28,43 @@ ORDEM DESENVOLVIMENTO:
 2- adicionar diferentes filtros de busca de pacientes
 3- fazer lista de perguntas padrao, criando um log de perguntas anteriores feitas. 
     |-everybody likes google book
+
+
+
+ARRUMAR PLOT GRAFICO 
+1007951 - plote o grafico de numero de eventos por mes que esse paciente teve
+
+
+
+safe_globals = {
+            "__builtins__": {
+                "print": print,
+                "len": len,
+                "range": range,
+                "min": min,
+                "max": max,
+                "sum": sum,
+                "abs": abs,
+                "round": round,
+                "sorted": sorted,
+                "list": list,
+                "dict": dict,
+                "set": set,
+                "tuple": tuple,
+                "str": str,
+                "int": int,
+                "float": float,
+                "bool": bool,
+                "enumerate": enumerate,
+                "zip": zip,
+            },
+            "plt": plt,
+            "pd": pd,
+            "Counter": Counter,
+            "datetime": datetime,
+            "force_series": None,
+            "to_datetime_series": None,
+            "DTSAFE": None,
+            "count_by_month": None,
+            "ensure_figure": None,
+        }
