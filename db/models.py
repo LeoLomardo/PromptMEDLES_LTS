@@ -15,7 +15,7 @@ def buscar_jornada_por_id(patient_id: str):
     with engine.connect() as conn:
         result = conn.execute(text("""
             SELECT *
-            FROM mpi.mpi_jornada_paciete_teste  
+            FROM mpi.mpi_jornada_paciete  
             WHERE mpi = :pid
             ORDER BY mpi ASC
         """), {"pid": patient_id}).fetchall()
@@ -26,7 +26,7 @@ def buscar_convenios():
     with engine.connect() as conn:
         query = text("""
             SELECT DISTINCT nome_convenio
-            FROM mpi.mpi_jornada_paciete_teste
+            FROM mpi.mpi_jornada_paciete
             WHERE nome_convenio IS NOT NULL
             ORDER BY nome_convenio;
         """)
@@ -37,7 +37,7 @@ def buscar_profissionais():
     with engine.connect() as conn:
         query = text("""
             SELECT DISTINCT nome_profissional
-            FROM mpi.mpi_jornada_paciete_teste
+            FROM mpi.mpi_jornada_paciete
             WHERE nome_profissional IS NOT NULL
             ORDER BY nome_profissional;
         """)
@@ -55,7 +55,6 @@ def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: l
     with engine.connect() as conn:
         params = {}
         
-        # --- Subquery para encontrar MPIs que correspondem a convênio/profissional ---
         subquery_conditions = []
         if convenios:
             subquery_conditions.append("nome_convenio = ANY(:convenios)")
@@ -65,12 +64,12 @@ def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: l
             params["profissionais"] = profissionais
 
         mpi_filter_subquery = ""
-        # Só cria a subquery se houver filtros de convênio ou profissional
+        # Só cria a subquery se houver filtros de convenio ou profissional
         if subquery_conditions:
             mpi_filter_subquery = f"""
                 AND t.mpi IN (
                     SELECT DISTINCT mpi
-                    FROM mpi.mpi_jornada_paciete_teste
+                    FROM mpi.mpi_jornada_paciete
                     WHERE {' AND '.join(subquery_conditions)}
                 )
             """
@@ -88,7 +87,7 @@ def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: l
                 t.mpi,
                 EXTRACT(YEAR FROM AGE(NOW(), t.data_nascimento)) AS idade_calculada
             FROM
-                mpi.mpi_jornada_paciete_teste t
+                mpi.mpi_jornada_paciete t
             WHERE
                 t.data_nascimento IS NOT NULL
                 {mpi_filter_subquery}
