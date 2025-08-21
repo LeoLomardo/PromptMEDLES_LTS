@@ -4,7 +4,7 @@ from flask import Flask, request, render_template, jsonify, redirect, url_for, s
 from dotenv import load_dotenv
 from openai import OpenAI
 from functools import wraps
-from db.models import buscar_jornada_por_id, filtrar_pacientes_por_idade
+from db.models import buscar_jornada_por_id, filtrar_pacientes, buscar_convenios, buscar_profissionais
 import os, traceback
 
 import io
@@ -69,7 +69,7 @@ def index():
     return render_template('index.html')
 
 
-#bloquear cache do no navegador
+#bloquear cache no navegador
 @app.after_request
 def no_cache(response):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
@@ -129,7 +129,7 @@ PERGUNTA: {user_prompt}
         print("Erro completo:", traceback.format_exc())
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500
 
-# --- NOVA ROTA PARA GERAR O GRFICO ---
+
 @app.route('/plot', methods=['POST'])
 @login_required
 def plot_graph():
@@ -195,34 +195,79 @@ def plot_graph():
 
 
 
-#funcionando e dando a resposta completa.
+@app.route('/convenios', methods=['GET'])
+@login_required
+def get_convenios():
+    try:
+        convenios = buscar_convenios()
+        return jsonify(convenios)
+    except Exception as e:
+        print("Erro ao buscar convenios:", traceback.format_exc())
+        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
+
+@app.route('/profissionais', methods=['GET'])
+@login_required
+def get_profissionais():
+    try:
+        profissionais = buscar_profissionais()
+        return jsonify(profissionais)
+    except Exception as e:
+        print("Erro ao buscar profissionais:", traceback.format_exc())
+        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
+
+
 @app.route('/filter', methods=['POST'])
 @login_required
 def filter_patients():
     data = request.get_json()
-    if not data or 'idade_min' not in data or 'idade_max' not in data:
-        return jsonify({"error": "Intervalo de idade nao fornecido."}), 400
+    if not data:
+        return jsonify({"error": "Requisição inválida."}), 400
 
     try:
-        idade_min = int(data['idade_min'])
-        idade_max = int(data['idade_max'])
+        # Pega os valores de idade (podem ser nulos ou vazios)
+        idade_min_str = data.get('idade_min')
+        idade_max_str = data.get('idade_max')
 
-        pacientes_encontrados = filtrar_pacientes_por_idade(idade_min, idade_max)
+        # Converte para int apenas se houver valor, senão define como None
+        idade_min = int(idade_min_str) if idade_min_str else None
+        idade_max = int(idade_max_str) if idade_max_str else None
+
+        convenios = data.get('convenios')
+        profissionais = data.get('profissionais') 
+
+        # Validação: Pelo menos um filtro deve ser preenchido
+        if idade_min is None and not convenios and not profissionais:
+            return jsonify({"error": "Por favor, forneça ao menos um critério de busca."}), 400
+        
+        # Validação: Se uma idade for preenchida, a outra também deve ser
+        if (idade_min is not None and idade_max is None) or (idade_min is None and idade_max is not None):
+            return jsonify({"error": "Para filtrar por idade, por favor, preencha tanto a idade mínima quanto a máxima."}), 400
+
+        pacientes_encontrados = filtrar_pacientes(idade_min, idade_max, convenios, profissionais)
         
         if not pacientes_encontrados:
-            resposta = f"Nenhum paciente encontrado com idade entre {idade_min} e {idade_max} anos."
+            resposta = f"Nenhum paciente encontrado com os filtros aplicados."
         else:
-            resposta = f"### Pacientes Encontrados (entre {idade_min} e {idade_max} anos):\n\n"
+            filtros_usados_list = []
+            if idade_min is not None and idade_max is not None:
+                filtros_usados_list.append(f"idade entre {idade_min} e {idade_max} anos")
+            if convenios:
+                filtros_usados_list.append(f"convênios: {', '.join(convenios)}")
+            if profissionais:
+                filtros_usados_list.append(f"médicos: {', '.join(profissionais)}")
+            
+            filtros_usados = f"({', '.join(filtros_usados_list)})" if filtros_usados_list else ""
+
+            resposta = f"### Pacientes Encontrados {filtros_usados}:\n\n"
             resposta += "| ID Paciente(MPI) | Idade |\n"
-            resposta += "|----------------------|-------------------|\n"
+            resposta += "|----------------------|-------|\n"
             for paciente in pacientes_encontrados:
-                
-                resposta += f"| {paciente['mpi']} | {int(paciente['idade_calculada'])} |\n"
+                resposta += f"| {paciente['mpi']}   |   {int(paciente['idade_calculada'])} |\n"
         
         return jsonify({"resposta": resposta})
 
     except (ValueError, TypeError):
-        return jsonify({"error": "Valores de idade invalidos. Por favor, insira apenas numeros."}), 400
+        return jsonify({"error": "Valores de idade inválidos. Por favor, insira apenas números."}), 400
     except Exception as e:
         print("Erro completo no filtro:", traceback.format_exc())
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500

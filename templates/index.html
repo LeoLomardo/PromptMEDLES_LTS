@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Chat Saude v1.0.0</title>
   <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+  
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -25,6 +29,13 @@
     <div class="filter-container">
         <input type="number" id="idadeMin" placeholder="Idade Minima" />
         <input type="number" id="idadeMax" placeholder="Idade Maxima" />
+        
+        <select id="convenioFilter" multiple>
+        </select>
+        
+        <select id="profissionalFilter" multiple>
+        </select>
+
         <button id="filterBtn">Filtrar Pacientes</button>
     </div>
     <hr>
@@ -39,6 +50,7 @@
   </div>
 
   <script>
+    // Mantendo as funcoes createMessage e enviarPrompt como estao...
     const messagesEl = document.getElementById("messages");
 
     function createMessage(text, who = "user") {
@@ -48,7 +60,6 @@
       if (who === "bot") {
         div.innerHTML = marked.parse(text);
         
-   
         const codeBlock = div.querySelector('pre code.language-python');
         if (codeBlock) {
           const plotButton = document.createElement('button');
@@ -96,7 +107,6 @@
               }
           });
         }
-
       } else {
         const span = document.createElement("span");
         span.innerText = text;
@@ -106,7 +116,6 @@
       messagesEl.appendChild(div);
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
-
 
     async function enviarPrompt(texto = null) {
       const textarea = document.getElementById("prompt");
@@ -128,7 +137,6 @@
       messagesEl.appendChild(loadingDiv);
       messagesEl.scrollTop = messagesEl.scrollHeight;
 
-
       try {
         const res = await fetch("/prompt", {
           method: "POST",
@@ -137,7 +145,6 @@
         });
 
         const data = await res.json();
-        
         const loading = document.querySelector(".bot-loading");
         if (loading) loading.remove();
 
@@ -153,58 +160,138 @@
         createMessage("Erro ao conectar com o servidor. Verifique sua conexao.", "bot");
       }
     }
-    document.getElementById("filterBtn").addEventListener("click", filtrarPacientes);
 
-    async function filtrarPacientes() {
-      const idadeMin = document.getElementById("idadeMin").value;
-      const idadeMax = document.getElementById("idadeMax").value;
+    // --- FUNcaO DE FILTRAGEM ATUALIZADA ---
+async function filtrarPacientes() {
+    const idadeMin = document.getElementById("idadeMin").value;
+    const idadeMax = document.getElementById("idadeMax").value;
+    
+    const conveniosEl = document.getElementById("convenioFilter");
+    const convenios = [...conveniosEl.selectedOptions].map(option => option.value);
 
-      if (!idadeMin || !idadeMax) {
-        alert("Por favor, preencha a idade minima e maxima para filtrar.");
+    const profissionaisEl = document.getElementById("profissionalFilter");
+    const profissionais = [...profissionaisEl.selectedOptions].map(option => option.value);
+
+    if (!idadeMin && !idadeMax && convenios.length === 0 && profissionais.length === 0) {
+        alert("Por favor, preencha ao menos um filtro para realizar a busca.");
         return;
-      }
+    }
+    if ((idadeMin && !idadeMax) || (!idadeMin && idadeMax)) {
+        alert("Para filtrar por idade, por favor, preencha tanto a idade minima quanto a maxima.");
+        return;
+    }
 
-      createMessage(`Buscando pacientes com idade entre ${idadeMin} e ${idadeMax} anos.`, "user");
+    // Constroi a mensagem para o usuario
+    let userMessageParts = [];
+    if (idadeMin && idadeMax) {
+        userMessageParts.push(`idade entre ${idadeMin} e ${idadeMax} anos`);
+    }
+    if (convenios.length > 0) {
+        userMessageParts.push(`convenios: ${convenios.join(", ")}`);
+    }
+    if (profissionais.length > 0) {
+        userMessageParts.push(`atendidos por: ${profissionais.join(", ")}`);
+    }
+    let userMessage = `Buscando pacientes com ${userMessageParts.join(", ")}.`;
+    createMessage(userMessage, "user");
 
-      const loadingDiv = document.createElement("div");
-      loadingDiv.className = "message bot-loading";
-      loadingDiv.innerHTML = "<span>Filtrando...</span>";
-      messagesEl.appendChild(loadingDiv);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+    const loadingDiv = document.createElement("div");
+    loadingDiv.className = "message bot-loading";
+    loadingDiv.innerHTML = "<span>Filtrando...</span>";
+    messagesEl.appendChild(loadingDiv);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
 
-      try {
+    try {
         const res = await fetch("/filter", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idade_min: parseInt(idadeMin), idade_max: parseInt(idadeMax) })
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+                idade_min: idadeMin, 
+                idade_max: idadeMax,
+                convenios: convenios,
+                profissionais: profissionais
+            })
         });
 
         const data = await res.json();
-        
         const loading = document.querySelector(".bot-loading");
         if (loading) loading.remove();
 
         if (res.ok) {
             createMessage(data.resposta, "bot");
         } else {
+            // Mostra o erro vindo do backend (ex: "Preencha ambas as idades")
             createMessage(data.error || "Ocorreu um erro no servidor.", "bot");
         }
-      } catch (error) {
+    } catch (error) {
         const loading = document.querySelector(".bot-loading");
         if (loading) loading.remove();
         createMessage("Erro ao conectar com o servidor. Verifique sua conexao.", "bot");
+    }
+}
+
+    // --- FUNcoES PARA POPULAR OS FILTROS ---
+    async function popularFiltros() {
+      const commonChoiceOptions = {
+          removeItemButton: true,
+          placeholder: true,
+          searchResultLimit: 10,
+          noResultsText: 'Nenhum resultado encontrado',
+          itemSelectText: 'Pressione para selecionar',
+      };
+      
+      // Popula e inicializa o filtro de convenios
+      try {
+        const resConv = await fetch('/convenios');
+        const convenios = await resConv.json();
+        const convenioSelect = document.getElementById('convenioFilter');
+        convenios.forEach(conv => {
+          const option = document.createElement('option');
+          option.value = conv;
+          option.textContent = conv;
+          convenioSelect.appendChild(option);
+        });
+        new Choices(convenioSelect, {
+            ...commonChoiceOptions,
+            placeholderValue: 'Selecione convenios',
+            searchPlaceholderValue: 'Pesquisar convenio...'
+        });
+      } catch (error) {
+        console.error("Erro ao buscar convenios:", error);
+      }
+
+      // Popula e inicializa o filtro de profissionais
+      try {
+        const resProf = await fetch('/profissionais');
+        const profissionais = await resProf.json();
+        const profissionalSelect = document.getElementById('profissionalFilter');
+        profissionais.forEach(prof => {
+            const option = document.createElement('option');
+            option.value = prof;
+            option.textContent = prof;
+            profissionalSelect.appendChild(option);
+        });
+        new Choices(profissionalSelect, {
+            ...commonChoiceOptions,
+            placeholderValue: 'Selecione medicos',
+            searchPlaceholderValue: 'Pesquisar medico...'
+        });
+      } catch (error) {
+        console.error("Erro ao buscar profissionais:", error);
       }
     }
-    document.getElementById("sendBtn")
-      .addEventListener("click", () => enviarPrompt());
 
-    document.getElementById("prompt")
-      .addEventListener("keydown", e => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          enviarPrompt();
-        }
-      });
+    // --- EVENT LISTENERS ---
+    document.getElementById("filterBtn").addEventListener("click", filtrarPacientes);
+    document.getElementById("sendBtn").addEventListener("click", () => enviarPrompt());
+    document.getElementById("prompt").addEventListener("keydown", e => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        enviarPrompt();
+      }
+    });
+      
+    document.addEventListener('DOMContentLoaded', popularFiltros);
   </script>
 </body>
 </html>
