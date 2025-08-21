@@ -292,3 +292,33 @@ body {
 .filter-container button:hover {
   opacity: 0.9;
 }
+
+.choices__item--selectable .choices__button {
+    
+    /* --- PASSO 1: Resetar completamente o estilo padrão --- */
+    border: none; /* Remove a borda azul que formava o ícone antigo */
+    width: 16px;  /* Largura da área do botão */
+    height: 16px; /* Altura da área do botão */
+    margin-left: 8px; /* Espaço entre o texto e o botão */
+    padding: 0;
+    background-color: #c0392b; /* Cor de fundo do botão (vermelho) */
+    border-radius: 4px; /* Bordas levemente arredondadas */
+    opacity: 0.8; /* Leve transparência para o estado normal */
+
+    /* --- PASSO 2: Adicionar um novo ícone 'X' bonito (feito com SVG) --- */
+    /* Este SVG desenha um 'X' branco. É a melhor forma de garantir que ele fique nítido. */
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='%23FFFFFF' stroke-width='1.5' d='M1,1 L9,9 M9,1 L1,9' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: 50%; /* Tamanho do 'X' dentro do botão */
+    
+    /* --- PASSO 3: Adicionar um efeito de transição suave --- */
+    transition: all 0.2s ease;
+}
+
+/* Efeito ao passar o mouse por cima para melhorar a experiência do usuário */
+.choices__item--selectable .choices__button:hover {
+    background-color: #e74c3c; /* Vermelho mais claro no hover */
+    opacity: 1; /* Remove a transparência */
+    transform: scale(1.1); /* Aumenta levemente o botão */
+}
