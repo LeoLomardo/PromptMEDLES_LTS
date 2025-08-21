@@ -69,7 +69,7 @@ def index():
     return render_template('index.html')
 
 
-#tentativa de bloquear cache do no navegador
+#bloquear cache do no navegador
 @app.after_request
 def no_cache(response):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
@@ -140,7 +140,7 @@ def plot_graph():
         return jsonify({"error": "Nenhum codigo fornecido."}), 400
 
     try:
-        # Ambiente seguro para execucao
+        # Ambiente seguro para execucao, precisa gerar mais testes de plot grafico para ver quais funcoes estao faltando
         safe_globals = {
             "__builtins__": {
                 "print": print,
@@ -195,6 +195,7 @@ def plot_graph():
 
 
 
+#funcionando e dando a resposta completa.
 @app.route('/filter', methods=['POST'])
 @login_required
 def filter_patients():
