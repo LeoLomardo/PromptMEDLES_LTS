@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from collections import Counter # A IA pode usar, entao disponibilizamos
 import pandas as pd
 from datetime import datetime
+import builtins
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -94,8 +95,8 @@ def handle_prompt():
 
         registros = registros[-1000:]
         contexto = "\n\n".join([
-            f"[{r['data_registro']}] {r['descricao']} "
-            f"(CPF: {r['cpf']}, Idade: {r['idade']}, "
+            f"[{r['data']}] {r['descricao']} "
+            f"(CPF: {r['cpf']}"
             f"Conjunto: {r['conjunto']}, Profissional: {r['nome_profissional']}, "
             f"Convenio: {r['nome_convenio']}, Fonte: {r['fonte']})"
             f"Data de Nascimento: {r['data_nascimento']}"
@@ -103,15 +104,21 @@ def handle_prompt():
         ])
 
         prompt_completo = f"""
-Voce e um assistente de saude analisando dados clinicos. Com base nas observacoes abaixo do paciente de ID {patient_id}, responda a pergunta do usuario. 
-Apenas quando o usuario explicitamente solicitat um grafico, gere um codigo em Python para plota-lo.
-IMPORTANTE: Gere APENAS o corpo do codigo, sem incluir `import matplotlib.pyplot as plt` ou `from collections import Counter`. As variaveis `plt` e `Counter` ja estarao disponiveis para uso direto no seu codigo.
+Voce e um assistente de saude analisando dados clinicos. Com base nas observacoes abaixo do paciente de ID {patient_id}, responda a pergunta do usuario, NAO ESCREVA O NOME DO PACIENTE NUNCA. Escreva o texto com formatacao markdown.
+Apenas quando o usuario explicitamente solicitar um grafico, gere um codigo em Python para plota-lo.
+
+INSTRUCOES PARA GERACAO DE GRAFICOS:
+- Gere APENAS o corpo do codigo em Python que prepara o grafico.
+- NUNCA inclua "import" statements.
+- NUNCA chame `plt.show()` ou `plt.savefig()`. O sistema se encarregara de exibir a imagem.
+- As seguintes variaveis ja estao disponiveis: `plt` (para graficos), `Counter` (para contagens), e `datetime` (a classe para manipular datas).
+- Para converter uma string de data, use `datetime.fromisoformat(...)` diretamente.
 
 DADOS DO PACIENTE:
 {contexto}
 
 PERGUNTA: {user_prompt}
-        """
+"""
 
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -140,50 +147,64 @@ def plot_graph():
         return jsonify({"error": "Nenhum codigo fornecido."}), 400
 
     try:
-        # Ambiente seguro para execucao, precisa gerar mais testes de plot grafico para ver quais funcoes estao faltando
+        # --- ETAPA DE LIMPEZA DO CÓDIGO (continua a mesma) ---
+        lines = code.split('\n')
+        safe_code_lines = [
+            line for line in lines
+            if "import " not in line and \
+               "plt.show()" not in line and \
+               "plt.savefig(" not in line
+        ]
+        safe_code = "\n".join(safe_code_lines)
+        
+        # --- NOVA LÓGICA DE IMPORTAÇÃO SEGURA ---
+        # Guarda uma referência à função de importação original
+        original_import = builtins.__import__
+        # Lista de módulos perigosos que queremos bloquear
+        blacklist = ['os', 'sys', 'subprocess', 'shutil', 'requests', 'socket', 'http']
+
+        def safe_importer(name, globals=None, locals=None, fromlist=(), level=0):
+            """
+            Esta função age como um "porteiro", verificando se o módulo
+            que está sendo importado está na lista negra antes de permitir.
+            """
+            for module_name in blacklist:
+                if name.startswith(module_name):
+                    raise ImportError(f"A importacao do modulo '{name}' nao e permitida.")
+            
+            return original_import(name, globals, locals, fromlist, level)
+        # ----------------------------------------------
+
+        # Ambiente seguro para execucao
+        safe_builtins_dict = {
+            "print": print, "len": len, "range": range, "min": min, "max": max,
+            "sum": sum, "abs": abs, "round": round, "sorted": sorted, "list": list,
+            "dict": dict, "set": set, "tuple": tuple, "str": str, "int": int,
+            "float": float, "bool": bool, "enumerate": enumerate, "zip": zip,
+            "__import__": safe_importer, # AQUI: Usamos nosso porteiro seguro!
+        }
+        
         safe_globals = {
-            "__builtins__": {
-                "print": print,
-                "len": len,
-                "range": range,
-                "min": min,
-                "max": max,
-                "sum": sum,
-                "abs": abs,
-                "round": round,
-                "sorted": sorted,
-                "list": list,
-                "dict": dict,
-                "set": set,
-                "tuple": tuple,
-                "str": str,
-                "int": int,
-                "float": float,
-                "bool": bool,
-                "enumerate": enumerate,
-                "zip": zip,
-            },
+            "__builtins__": safe_builtins_dict,
             "plt": plt,
             "pd": pd,
             "Counter": Counter,
             "datetime": datetime,
-            "force_series": None,
-            "to_datetime_series": None,
-            "DTSAFE": None,
-            "count_by_month": None,
-            "ensure_figure": None,
         }
         
         plt.clf()
 
-        exec(code, safe_globals)
+        # Executa o código já limpo e seguro
+        exec(safe_code, safe_globals)
 
+        # Prepara um buffer em memória para salvar a imagem do gráfico
         buf = io.BytesIO()
         plt.savefig(buf, format='png', bbox_inches='tight')
         buf.seek(0)
 
-        # Codifica a imagem em Base64 para enviar via JSON
+        # Codifica a imagem em Base64 para ser enviada via JSON para o frontend
         image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
         
         buf.close()
 
@@ -192,7 +213,6 @@ def plot_graph():
     except Exception as e:
         print("Erro ao executar codigo do grafico:", traceback.format_exc())
         return jsonify({"error": f"Erro ao gerar o grafico: {str(e)}"}), 500
-
 
 
 @app.route('/convenios', methods=['GET'])
@@ -262,7 +282,7 @@ def filter_patients():
             resposta += "| ID Paciente(MPI) | Idade |\n"
             resposta += "|----------------------|-------|\n"
             for paciente in pacientes_encontrados:
-                resposta += f"| {paciente['mpi']}   |   {int(paciente['idade_calculada'])} |\n"
+                resposta += f"| {paciente['id_paciente']}   |   {int(paciente['idade_calculada'])} |\n"
         
         return jsonify({"resposta": resposta})
 

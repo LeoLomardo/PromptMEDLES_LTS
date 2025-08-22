@@ -9,15 +9,16 @@ load_dotenv()
 
 DB_URL = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
 
+
 engine = create_engine(DB_URL, pool_pre_ping=True)
 
 def buscar_jornada_por_id(patient_id: str):
     with engine.connect() as conn:
         result = conn.execute(text("""
             SELECT *
-            FROM mpi.mpi_jornada_paciete  
-            WHERE mpi = :pid
-            ORDER BY mpi ASC
+            FROM mpiv02.events  
+            WHERE id_paciente = :pid
+            ORDER BY id_paciente ASC
         """), {"pid": patient_id}).fetchall()
         return [dict(row._mapping) for row in result]
 
@@ -26,7 +27,7 @@ def buscar_convenios():
     with engine.connect() as conn:
         query = text("""
             SELECT DISTINCT nome_convenio
-            FROM mpi.mpi_jornada_paciete
+            FROM mpiv02.events
             WHERE nome_convenio IS NOT NULL
             ORDER BY nome_convenio;
         """)
@@ -37,7 +38,7 @@ def buscar_profissionais():
     with engine.connect() as conn:
         query = text("""
             SELECT DISTINCT nome_profissional
-            FROM mpi.mpi_jornada_paciete
+            FROM mpiv02.events
             WHERE nome_profissional IS NOT NULL
             ORDER BY nome_profissional;
         """)
@@ -67,9 +68,9 @@ def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: l
         # Só cria a subquery se houver filtros de convenio ou profissional
         if subquery_conditions:
             mpi_filter_subquery = f"""
-                AND t.mpi IN (
-                    SELECT DISTINCT mpi
-                    FROM mpi.mpi_jornada_paciete
+                AND t.id_paciente IN (
+                    SELECT DISTINCT id_paciente
+                    FROM mpiv02.events
                     WHERE {' AND '.join(subquery_conditions)}
                 )
             """
@@ -84,18 +85,18 @@ def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: l
 
         main_query_sql = f"""
             SELECT
-                t.mpi,
+                t.id_paciente,
                 EXTRACT(YEAR FROM AGE(NOW(), t.data_nascimento)) AS idade_calculada
             FROM
-                mpi.mpi_jornada_paciete t
+                mpiv02.events t
             WHERE
                 t.data_nascimento IS NOT NULL
                 {mpi_filter_subquery}
             GROUP BY
-                t.mpi, t.data_nascimento
+                t.id_paciente, t.data_nascimento
             {having_clause}
             ORDER BY
-                t.mpi;
+                t.id_paciente;
         """
 
         query = text(main_query_sql)
