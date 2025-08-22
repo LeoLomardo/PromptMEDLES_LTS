@@ -322,3 +322,15 @@ body {
     opacity: 1; /* Remove a transparência */
     transform: scale(1.1); /* Aumenta levemente o botão */
 }
+/* Estilo para os IDs de paciente clicáveis na tabela de resultados */
+.patient-id-link {
+  color: var(--user-bg); /* Usa a cor azul do tema para destaque */
+  font-weight: bold;
+  text-decoration: underline;
+  cursor: pointer; /* Essencial para mostrar que é clicável */
+  transition: opacity 0.2s ease;
+}
+
+.patient-id-link:hover {
+  opacity: 0.8; /* Efeito visual ao passar o mouse */
+}

@@ -263,10 +263,10 @@ def filter_patients():
         idade_max = int(idade_max_str) if idade_max_str else None
 
         convenios = data.get('convenios')
-        profissionais = data.get('profissionais') 
-        conjuntos = data.get('conjuntos') # NOVO: Pega o filtro de conjuntos
+        profissionais = data.get('profissionais')
+        conjuntos = data.get('conjuntos')
 
-        # ALTERADO: Validação atualizada para incluir o novo filtro
+        # Validação: Pelo menos um filtro deve ser preenchido
         if idade_min is None and not convenios and not profissionais and not conjuntos:
             return jsonify({"error": "Por favor, forneça ao menos um critério de busca."}), 400
         
@@ -274,7 +274,6 @@ def filter_patients():
         if (idade_min is not None and idade_max is None) or (idade_min is None and idade_max is not None):
             return jsonify({"error": "Para filtrar por idade, por favor, preencha tanto a idade mínima quanto a máxima."}), 400
 
-        # ALTERADO: Passa o novo filtro para a função de busca
         pacientes_encontrados = filtrar_pacientes(idade_min, idade_max, convenios, profissionais, conjuntos)
         
         if not pacientes_encontrados:
@@ -287,7 +286,6 @@ def filter_patients():
                 filtros_usados_list.append(f"convênios: {', '.join(convenios)}")
             if profissionais:
                 filtros_usados_list.append(f"médicos: {', '.join(profissionais)}")
-            # NOVO: Adiciona os conjuntos usados na mensagem de resposta
             if conjuntos:
                 filtros_usados_list.append(f"conjuntos: {', '.join(conjuntos)}")
             
@@ -297,7 +295,9 @@ def filter_patients():
             resposta += "| ID Paciente(MPI) | Idade |\n"
             resposta += "|----------------------|-------|\n"
             for paciente in pacientes_encontrados:
-                resposta += f"| {paciente['id_paciente']}   |   {int(paciente['idade_calculada'])} |\n"
+                patient_id = paciente['id_paciente']
+                
+                resposta += f"| <span class='patient-id-link' data-id='{patient_id}'>{patient_id}</span> | {int(paciente['idade_calculada'])} |\n"
         
         return jsonify({"resposta": resposta})
 

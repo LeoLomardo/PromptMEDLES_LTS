@@ -163,7 +163,6 @@
       }
     }
 
-    // --- ALTERADO: Funcao de filtragem atualizada ---
     async function filtrarPacientes() {
         const idadeMin = document.getElementById("idadeMin").value;
         const idadeMax = document.getElementById("idadeMax").value;
@@ -174,11 +173,9 @@
         const profissionaisEl = document.getElementById("profissionalFilter");
         const profissionais = [...profissionaisEl.selectedOptions].map(option => option.value);
 
-        // NOVO: Pega os valores do filtro de conjunto
         const conjuntosEl = document.getElementById("conjuntoFilter");
         const conjuntos = [...conjuntosEl.selectedOptions].map(option => option.value);
 
-        // ALTERADO: Validacao agora inclui o novo filtro
         if (!idadeMin && !idadeMax && convenios.length === 0 && profissionais.length === 0 && conjuntos.length === 0) {
             alert("Por favor, preencha ao menos um filtro para realizar a busca.");
             return;
@@ -198,7 +195,6 @@
         if (profissionais.length > 0) {
             userMessageParts.push(`atendidos por: ${profissionais.join(", ")}`);
         }
-        // NOVO: Adiciona os conjuntos na mensagem do usuario
         if (conjuntos.length > 0) {
             userMessageParts.push(`conjuntos: ${conjuntos.join(", ")}`);
         }
@@ -212,7 +208,6 @@
         messagesEl.scrollTop = messagesEl.scrollHeight;
 
         try {
-            // ALTERADO: Envia o novo filtro no corpo da requisicao
             const res = await fetch("/filter", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -241,7 +236,6 @@
         }
     }
 
-    // --- ALTERADO: Funcao para popular filtros atualizada ---
     async function popularFiltros() {
       const commonChoiceOptions = {
           removeItemButton: true,
@@ -310,7 +304,6 @@
       }
     }
 
-    // --- EVENT LISTENERS ---
     document.getElementById("filterBtn").addEventListener("click", filtrarPacientes);
     document.getElementById("sendBtn").addEventListener("click", () => enviarPrompt());
     document.getElementById("prompt").addEventListener("keydown", e => {
@@ -321,6 +314,24 @@
     });
       
     document.addEventListener('DOMContentLoaded', popularFiltros);
-  </script>
+
+    messagesEl.addEventListener('click', (event) => {
+        if (event.target.classList.contains('patient-id-link')) {
+            const patientId = event.target.dataset.id;
+            const patientIdInput = document.getElementById('patientId');
+            
+            patientIdInput.value = patientId; 
+            
+            patientIdInput.focus(); 
+            
+            patientIdInput.style.transition = 'box-shadow 0.1s ease-in-out';
+            patientIdInput.style.boxShadow = '0 0 10px rgba(52, 152, 219, 0.7)';
+            setTimeout(() => {
+                patientIdInput.style.boxShadow = '';
+            }, 500);
+        }
+    });
+
+</script>
 </body>
 </html>

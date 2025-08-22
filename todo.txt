@@ -25,14 +25,18 @@ ORDEM DESENVOLVIMENTO:
 
 
 1-gerar CSV, JSON, , ate mesmo HTML ETC...
-2- adicionar diferentes filtros de busca de pacientes
+
+2- fazer lista de perguntas padrao, criando um log de perguntas anteriores feitas. 
+    |-everybody likes google book
+#-------------------------------------------------------//FEITO
+3- adicionar diferentes filtros de busca de pacientes
     |-filtrar por tipo de convenio
         |-fazer por dropbar com os tipos de convenio presentes
     |-filtrar por medico responsavel
         |-fazer por dropbar e por pesquisa tambem, podendo marcar mais de 1 por vez
+    |-filtrar por conjunto
+        |-fazer dropbar e pesquisar digitando tambem,
 
-3- fazer lista de perguntas padrao, criando um log de perguntas anteriores feitas. 
-    |-everybody likes google book
 
 
 
