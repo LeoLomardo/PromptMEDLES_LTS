@@ -36,6 +36,9 @@
         <select id="profissionalFilter" multiple>
         </select>
 
+        <select id="conjuntoFilter" multiple>
+        </select>
+
         <button id="filterBtn">Filtrar Pacientes</button>
     </div>
     <hr>
@@ -50,7 +53,6 @@
   </div>
 
   <script>
-    // Mantendo as funcoes createMessage e enviarPrompt como estao...
     const messagesEl = document.getElementById("messages");
 
     function createMessage(text, who = "user") {
@@ -161,76 +163,85 @@
       }
     }
 
-    // --- FUNcaO DE FILTRAGEM ATUALIZADA ---
-async function filtrarPacientes() {
-    const idadeMin = document.getElementById("idadeMin").value;
-    const idadeMax = document.getElementById("idadeMax").value;
-    
-    const conveniosEl = document.getElementById("convenioFilter");
-    const convenios = [...conveniosEl.selectedOptions].map(option => option.value);
+    // --- ALTERADO: Funcao de filtragem atualizada ---
+    async function filtrarPacientes() {
+        const idadeMin = document.getElementById("idadeMin").value;
+        const idadeMax = document.getElementById("idadeMax").value;
+        
+        const conveniosEl = document.getElementById("convenioFilter");
+        const convenios = [...conveniosEl.selectedOptions].map(option => option.value);
 
-    const profissionaisEl = document.getElementById("profissionalFilter");
-    const profissionais = [...profissionaisEl.selectedOptions].map(option => option.value);
+        const profissionaisEl = document.getElementById("profissionalFilter");
+        const profissionais = [...profissionaisEl.selectedOptions].map(option => option.value);
 
-    if (!idadeMin && !idadeMax && convenios.length === 0 && profissionais.length === 0) {
-        alert("Por favor, preencha ao menos um filtro para realizar a busca.");
-        return;
-    }
-    if ((idadeMin && !idadeMax) || (!idadeMin && idadeMax)) {
-        alert("Para filtrar por idade, por favor, preencha tanto a idade minima quanto a maxima.");
-        return;
-    }
+        // NOVO: Pega os valores do filtro de conjunto
+        const conjuntosEl = document.getElementById("conjuntoFilter");
+        const conjuntos = [...conjuntosEl.selectedOptions].map(option => option.value);
 
-    // Constroi a mensagem para o usuario
-    let userMessageParts = [];
-    if (idadeMin && idadeMax) {
-        userMessageParts.push(`idade entre ${idadeMin} e ${idadeMax} anos`);
-    }
-    if (convenios.length > 0) {
-        userMessageParts.push(`convenios: ${convenios.join(", ")}`);
-    }
-    if (profissionais.length > 0) {
-        userMessageParts.push(`atendidos por: ${profissionais.join(", ")}`);
-    }
-    let userMessage = `Buscando pacientes com ${userMessageParts.join(", ")}.`;
-    createMessage(userMessage, "user");
-
-    const loadingDiv = document.createElement("div");
-    loadingDiv.className = "message bot-loading";
-    loadingDiv.innerHTML = "<span>Filtrando...</span>";
-    messagesEl.appendChild(loadingDiv);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-
-    try {
-        const res = await fetch("/filter", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                idade_min: idadeMin, 
-                idade_max: idadeMax,
-                convenios: convenios,
-                profissionais: profissionais
-            })
-        });
-
-        const data = await res.json();
-        const loading = document.querySelector(".bot-loading");
-        if (loading) loading.remove();
-
-        if (res.ok) {
-            createMessage(data.resposta, "bot");
-        } else {
-            // Mostra o erro vindo do backend (ex: "Preencha ambas as idades")
-            createMessage(data.error || "Ocorreu um erro no servidor.", "bot");
+        // ALTERADO: Validacao agora inclui o novo filtro
+        if (!idadeMin && !idadeMax && convenios.length === 0 && profissionais.length === 0 && conjuntos.length === 0) {
+            alert("Por favor, preencha ao menos um filtro para realizar a busca.");
+            return;
         }
-    } catch (error) {
-        const loading = document.querySelector(".bot-loading");
-        if (loading) loading.remove();
-        createMessage("Erro ao conectar com o servidor. Verifique sua conexao.", "bot");
-    }
-}
+        if ((idadeMin && !idadeMax) || (!idadeMin && idadeMax)) {
+            alert("Para filtrar por idade, por favor, preencha tanto a idade minima quanto a maxima.");
+            return;
+        }
 
-    // --- FUNcoES PARA POPULAR OS FILTROS ---
+        let userMessageParts = [];
+        if (idadeMin && idadeMax) {
+            userMessageParts.push(`idade entre ${idadeMin} e ${idadeMax} anos`);
+        }
+        if (convenios.length > 0) {
+            userMessageParts.push(`convenios: ${convenios.join(", ")}`);
+        }
+        if (profissionais.length > 0) {
+            userMessageParts.push(`atendidos por: ${profissionais.join(", ")}`);
+        }
+        // NOVO: Adiciona os conjuntos na mensagem do usuario
+        if (conjuntos.length > 0) {
+            userMessageParts.push(`conjuntos: ${conjuntos.join(", ")}`);
+        }
+        let userMessage = `Buscando pacientes com ${userMessageParts.join(", ")}.`;
+        createMessage(userMessage, "user");
+
+        const loadingDiv = document.createElement("div");
+        loadingDiv.className = "message bot-loading";
+        loadingDiv.innerHTML = "<span>Filtrando...</span>";
+        messagesEl.appendChild(loadingDiv);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+
+        try {
+            // ALTERADO: Envia o novo filtro no corpo da requisicao
+            const res = await fetch("/filter", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    idade_min: idadeMin, 
+                    idade_max: idadeMax,
+                    convenios: convenios,
+                    profissionais: profissionais,
+                    conjuntos: conjuntos 
+                })
+            });
+
+            const data = await res.json();
+            const loading = document.querySelector(".bot-loading");
+            if (loading) loading.remove();
+
+            if (res.ok) {
+                createMessage(data.resposta, "bot");
+            } else {
+                createMessage(data.error || "Ocorreu um erro no servidor.", "bot");
+            }
+        } catch (error) {
+            const loading = document.querySelector(".bot-loading");
+            if (loading) loading.remove();
+            createMessage("Erro ao conectar com o servidor. Verifique sua conexao.", "bot");
+        }
+    }
+
+    // --- ALTERADO: Funcao para popular filtros atualizada ---
     async function popularFiltros() {
       const commonChoiceOptions = {
           removeItemButton: true,
@@ -240,7 +251,6 @@ async function filtrarPacientes() {
           itemSelectText: 'Pressione para selecionar',
       };
       
-      // Popula e inicializa o filtro de convenios
       try {
         const resConv = await fetch('/convenios');
         const convenios = await resConv.json();
@@ -260,7 +270,6 @@ async function filtrarPacientes() {
         console.error("Erro ao buscar convenios:", error);
       }
 
-      // Popula e inicializa o filtro de profissionais
       try {
         const resProf = await fetch('/profissionais');
         const profissionais = await resProf.json();
@@ -278,6 +287,26 @@ async function filtrarPacientes() {
         });
       } catch (error) {
         console.error("Erro ao buscar profissionais:", error);
+      }
+
+      // NOVO: Popula e inicializa o filtro de conjuntos
+      try {
+        const resConj = await fetch('/conjuntos');
+        const conjuntos = await resConj.json();
+        const conjuntoSelect = document.getElementById('conjuntoFilter');
+        conjuntos.forEach(conj => {
+            const option = document.createElement('option');
+            option.value = conj;
+            option.textContent = conj;
+            conjuntoSelect.appendChild(option);
+        });
+        new Choices(conjuntoSelect, {
+            ...commonChoiceOptions,
+            placeholderValue: 'Selecione conjuntos',
+            searchPlaceholderValue: 'Pesquisar conjunto...'
+        });
+      } catch (error) {
+        console.error("Erro ao buscar conjuntos:", error);
       }
     }
 

@@ -45,12 +45,22 @@ def buscar_profissionais():
         result = conn.execute(query).fetchall()
         return [row[0] for row in result]
 
+def busca_conjunto():
+        with engine.connect() as conn:
+            query = text("""
+                SELECT DISTINCT conjunto
+                FROM mpiv02.events
+                WHERE conjunto IS NOT NULL
+                ORDER BY conjunto;
+            """)
+            result = conn.execute(query).fetchall()
+            return [row[0] for row in result]
 
 #funcao filtra pacientes considerando idade, convenio E/OU profissional responsavel
-def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: list = None, profissionais: list = None):
+def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: list = None, profissionais: list = None, conjuntos: list = None):
 
-    # Se nenhum filtro for aplicado, retorna uma lista vazia para evitar buscar todos os pacientes.
-    if idade_min is None and idade_max is None and not convenios and not profissionais:
+    # Se nenhum filtro for aplicado, retorna uma lista vazia.
+    if idade_min is None and idade_max is None and not convenios and not profissionais and not conjuntos:
         return []
 
     with engine.connect() as conn:
@@ -63,9 +73,12 @@ def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: l
         if profissionais:
             subquery_conditions.append("nome_profissional = ANY(:profissionais)")
             params["profissionais"] = profissionais
+        # Lógica para o novo filtro de conjunto
+        if conjuntos:
+            subquery_conditions.append("conjunto = ANY(:conjuntos)")
+            params["conjuntos"] = conjuntos
 
         mpi_filter_subquery = ""
-        # Só cria a subquery se houver filtros de convenio ou profissional
         if subquery_conditions:
             mpi_filter_subquery = f"""
                 AND t.id_paciente IN (
@@ -75,8 +88,6 @@ def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: l
                 )
             """
 
-        # --- Query Principal ---
-        # Cláusula HAVING para idade será adicionada dinamicamente
         having_clause = ""
         if idade_min is not None and idade_max is not None:
             having_clause = "HAVING EXTRACT(YEAR FROM AGE(NOW(), t.data_nascimento)) BETWEEN :idade_min AND :idade_max"

@@ -4,7 +4,7 @@ from flask import Flask, request, render_template, jsonify, redirect, url_for, s
 from dotenv import load_dotenv
 from openai import OpenAI
 from functools import wraps
-from db.models import buscar_jornada_por_id, filtrar_pacientes, buscar_convenios, buscar_profissionais
+from db.models import buscar_jornada_por_id, filtrar_pacientes, buscar_convenios, buscar_profissionais, busca_conjunto
 import os, traceback
 
 import io
@@ -236,6 +236,16 @@ def get_profissionais():
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500
 
 
+@app.route('/conjuntos', methods=['GET'])
+@login_required
+def get_conjuntos():
+    try:
+        conjuntos = busca_conjunto()
+        return jsonify(conjuntos)
+    except Exception as e:
+        print("Erro ao buscar conjuntos:", traceback.format_exc())
+        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
+
 @app.route('/filter', methods=['POST'])
 @login_required
 def filter_patients():
@@ -254,16 +264,18 @@ def filter_patients():
 
         convenios = data.get('convenios')
         profissionais = data.get('profissionais') 
+        conjuntos = data.get('conjuntos') # NOVO: Pega o filtro de conjuntos
 
-        # Validação: Pelo menos um filtro deve ser preenchido
-        if idade_min is None and not convenios and not profissionais:
+        # ALTERADO: Validação atualizada para incluir o novo filtro
+        if idade_min is None and not convenios and not profissionais and not conjuntos:
             return jsonify({"error": "Por favor, forneça ao menos um critério de busca."}), 400
         
         # Validação: Se uma idade for preenchida, a outra também deve ser
         if (idade_min is not None and idade_max is None) or (idade_min is None and idade_max is not None):
             return jsonify({"error": "Para filtrar por idade, por favor, preencha tanto a idade mínima quanto a máxima."}), 400
 
-        pacientes_encontrados = filtrar_pacientes(idade_min, idade_max, convenios, profissionais)
+        # ALTERADO: Passa o novo filtro para a função de busca
+        pacientes_encontrados = filtrar_pacientes(idade_min, idade_max, convenios, profissionais, conjuntos)
         
         if not pacientes_encontrados:
             resposta = f"Nenhum paciente encontrado com os filtros aplicados."
@@ -275,6 +287,9 @@ def filter_patients():
                 filtros_usados_list.append(f"convênios: {', '.join(convenios)}")
             if profissionais:
                 filtros_usados_list.append(f"médicos: {', '.join(profissionais)}")
+            # NOVO: Adiciona os conjuntos usados na mensagem de resposta
+            if conjuntos:
+                filtros_usados_list.append(f"conjuntos: {', '.join(conjuntos)}")
             
             filtros_usados = f"({', '.join(filtros_usados_list)})" if filtros_usados_list else ""
 
