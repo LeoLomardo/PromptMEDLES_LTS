@@ -274,6 +274,10 @@ def filter_patients():
         if not pacientes_encontrados:
             resposta = f"Nenhum paciente encontrado com os filtros aplicados."
         else:
+
+            total_pacientes = len(pacientes_encontrados)
+            total_eventos_filtrados = sum(paciente['total_eventos'] for paciente in pacientes_encontrados)
+            
             filtros_usados_list = []
             if idade_min is not None and idade_max is not None:
                 filtros_usados_list.append(f"idade entre {idade_min} e {idade_max} anos")
@@ -288,7 +292,12 @@ def filter_patients():
 
             response_parts = []
             response_parts.append(f"### Pacientes Encontrados {filtros_usados}:\n\n")
-            response_parts.append("| -ID Paciente(MPI)- | -Idade- | -N° de Eventos- |\n")
+            
+            response_parts.append(f"**Resumo da Busca:**\n")
+            response_parts.append(f"* **Total de Pacientes Encontrados:** {total_pacientes}\n")
+            response_parts.append(f"* **Total de Eventos (destes pacientes):** {total_eventos_filtrados}\n\n")
+
+            response_parts.append("| ID Paciente | Idade | N° de Eventos |\n")
             response_parts.append("|----------------------|-------|---------------|\n")
             
             for paciente in pacientes_encontrados:
