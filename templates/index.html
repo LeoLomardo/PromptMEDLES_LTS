@@ -61,17 +61,39 @@
 
       if (who === "bot") {
         div.innerHTML = marked.parse(text);
-        
-        const codeBlock = div.querySelector('pre code.language-python');
+
+        // 1) Tenta achar <pre><code> renderizado
+        const allBlocks = div.querySelectorAll('pre code');
+        let codeBlock = null;
+
+        if (allBlocks.length) {
+          codeBlock = [...allBlocks].find(cb => cb.classList.contains('language-python')) || allBlocks[0];
+        }
+
+        // 2) Fallback: regex no markdown bruto
+        if (!codeBlock) {
+          const m = text.match(/```(?:python)?\s*([\s\S]*?)```/i);
+          if (m) {
+            const pre = document.createElement('pre');
+            const code = document.createElement('code');
+            code.textContent = m[1].trim();
+            pre.appendChild(code);
+            div.appendChild(pre);
+            codeBlock = code;
+          }
+        }
+
+        // 3) Se achou codigo, cria botao "Gerar Grafico"
         if (codeBlock) {
           const plotButton = document.createElement('button');
           plotButton.innerText = 'Gerar Grafico';
           plotButton.className = 'plot-button'; 
           
-          codeBlock.parentElement.insertAdjacentElement('afterend', plotButton);
+          const preParent = codeBlock.closest('pre') || codeBlock.parentElement;
+          preParent.insertAdjacentElement('afterend', plotButton);
 
           plotButton.addEventListener('click', async () => {
-              const code = codeBlock.innerText;
+              const code = codeBlock.innerText || codeBlock.textContent || '';
               plotButton.innerText = 'Gerando...';
               plotButton.disabled = true;
 
@@ -79,12 +101,12 @@
                   const res = await fetch('/plot', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ code: code })
+                      body: JSON.stringify({ code })
                   });
                   
                   const data = await res.json();
 
-                  if (res.ok) {
+                  if (res.ok && data.image_base64) {
                       const img = document.createElement('img');
                       img.src = `data:image/png;base64,${data.image_base64}`;
                       img.alt = "Grafico Gerado";
@@ -283,7 +305,6 @@
         console.error("Erro ao buscar profissionais:", error);
       }
 
-      // NOVO: Popula e inicializa o filtro de conjuntos
       try {
         const resConj = await fetch('/conjuntos');
         const conjuntos = await resConj.json();
@@ -321,9 +342,7 @@
             const patientIdInput = document.getElementById('patientId');
             
             patientIdInput.value = patientId; 
-            
             patientIdInput.focus(); 
-            
             patientIdInput.style.transition = 'box-shadow 0.1s ease-in-out';
             patientIdInput.style.boxShadow = '0 0 10px rgba(52, 152, 219, 0.7)';
             setTimeout(() => {
@@ -331,7 +350,6 @@
             }, 500);
         }
     });
-
 </script>
 </body>
 </html>

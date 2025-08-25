@@ -59,7 +59,6 @@ def busca_conjunto():
 #funcao filtra pacientes considerando idade, convenio E/OU profissional responsavel
 def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: list = None, profissionais: list = None, conjuntos: list = None):
 
-    # Se nenhum filtro for aplicado, retorna uma lista vazia.
     if idade_min is None and idade_max is None and not convenios and not profissionais and not conjuntos:
         return []
 
@@ -73,7 +72,6 @@ def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: l
         if profissionais:
             subquery_conditions.append("nome_profissional = ANY(:profissionais)")
             params["profissionais"] = profissionais
-        # Lógica para o novo filtro de conjunto
         if conjuntos:
             subquery_conditions.append("conjunto = ANY(:conjuntos)")
             params["conjuntos"] = conjuntos
@@ -97,7 +95,8 @@ def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: l
         main_query_sql = f"""
             SELECT
                 t.id_paciente,
-                EXTRACT(YEAR FROM AGE(NOW(), t.data_nascimento)) AS idade_calculada
+                EXTRACT(YEAR FROM AGE(NOW(), t.data_nascimento)) AS idade_calculada,
+                COUNT(*) AS total_eventos
             FROM
                 mpiv02.events t
             WHERE

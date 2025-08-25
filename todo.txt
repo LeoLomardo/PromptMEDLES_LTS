@@ -65,3 +65,6 @@ REALIZAR TESTES AO MUDAR O CODIGO:
 
     TESTE 8:
             1007951 - plote um grafico avaliando a variacao do IMC desse paciente em cada data
+
+    TESTE 9:
+            9866408 - Faca um resumo

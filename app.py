@@ -16,6 +16,7 @@ from collections import Counter # A IA pode usar, entao disponibilizamos
 import pandas as pd
 from datetime import datetime
 import builtins
+import re
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -107,7 +108,7 @@ def handle_prompt():
 Voce e um assistente de saude analisando dados clinicos. Com base nas observacoes abaixo do paciente de ID {patient_id}, responda a pergunta do usuario, NAO ESCREVA O NOME DO PACIENTE NUNCA. Escreva o texto com formatacao markdown.
 Apenas quando o usuario explicitamente solicitar um grafico, gere um codigo em Python para plota-lo.
 
-INSTRUCOES PARA GERACAO DE GRAFICOS:
+Quando (e somente quando) o usuario pedir um grafico, responda **apenas** com UM bloco de codigo Python entre crases triplas, no formato:
 - Gere APENAS o corpo do codigo em Python que prepara o grafico.
 - NUNCA inclua "import" statements.
 - NUNCA chame `plt.show()` ou `plt.savefig()`. O sistema se encarregara de exibir a imagem.
@@ -121,7 +122,7 @@ PERGUNTA: {user_prompt}
 """
 
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": "Voce e um assistente medico que analisa prontuarios clinicos e responde perguntas com base em observacaes do paciente."},
                 {"role": "user", "content": prompt_completo}
@@ -141,49 +142,55 @@ PERGUNTA: {user_prompt}
 @login_required
 def plot_graph():
     data = request.get_json(force=True)
-    code = data.get('code')
+    raw = (data.get('code') or '').strip()
 
-    if not code:
+    if not raw:
         return jsonify({"error": "Nenhum codigo fornecido."}), 400
 
     try:
-        # --- ETAPA DE LIMPEZA DO CÓDIGO (continua a mesma) ---
-        lines = code.split('\n')
-        safe_code_lines = [
-            line for line in lines
-            if "import " not in line and \
-               "plt.show()" not in line and \
-               "plt.savefig(" not in line
-        ]
-        safe_code = "\n".join(safe_code_lines)
-        
-        # --- NOVA LÓGICA DE IMPORTAÇÃO SEGURA ---
-        # Guarda uma referência à função de importação original
+        # 1) Extrai o primeiro bloco ```python ... ``` ou ``` ... ```
+        m = re.search(r"```(?:python)?\s*(.+?)```", raw, flags=re.S|re.I)
+        code = m.group(1).strip() if m else raw  # se não houver crases, usa o texto todo mesmo
+
+        # 2) Remove imports e chamadas proibidas
+        lines = code.splitlines()
+        safe_code_lines = []
+        for line in lines:
+            s = line.strip()
+            if s.startswith("import ") or s.startswith("from "):
+                continue
+            if "plt.show(" in s.replace(" ", "") or "plt.savefig(" in s.replace(" ", ""):
+                continue
+            safe_code_lines.append(line)
+        safe_code = "\n".join(safe_code_lines).strip()
+
+        # 3) Se o modelo colou varias instrucoes na mesma linha, adiciona quebras antes de plt.*
+        #    Exemplos: ") plt.", "] plt.", "} plt." ? nova linha antes de plt.
+        safe_code = re.sub(r"\)\s+plt\.", r")\nplt.", safe_code)
+        safe_code = re.sub(r"\]\s+plt\.", r"]\nplt.", safe_code)
+        safe_code = re.sub(r"\}\s+plt\.", r"}\nplt.", safe_code)
+        # Também separa comandos por ';' se houver
+        if "; " in safe_code:
+            safe_code = safe_code.replace("; ", ";\n")
+
+        # 4) Import guard
         original_import = builtins.__import__
-        # Lista de módulos perigosos que queremos bloquear
         blacklist = ['os', 'sys', 'subprocess', 'shutil', 'requests', 'socket', 'http']
 
         def safe_importer(name, globals=None, locals=None, fromlist=(), level=0):
-            """
-            Esta função age como um "porteiro", verificando se o módulo
-            que está sendo importado está na lista negra antes de permitir.
-            """
             for module_name in blacklist:
                 if name.startswith(module_name):
                     raise ImportError(f"A importacao do modulo '{name}' nao e permitida.")
-            
             return original_import(name, globals, locals, fromlist, level)
-        # ----------------------------------------------
 
-        # Ambiente seguro para execucao
         safe_builtins_dict = {
             "print": print, "len": len, "range": range, "min": min, "max": max,
             "sum": sum, "abs": abs, "round": round, "sorted": sorted, "list": list,
             "dict": dict, "set": set, "tuple": tuple, "str": str, "int": int,
             "float": float, "bool": bool, "enumerate": enumerate, "zip": zip,
-            "__import__": safe_importer, # AQUI: Usamos nosso porteiro seguro!
+            "__import__": safe_importer,
         }
-        
+
         safe_globals = {
             "__builtins__": safe_builtins_dict,
             "plt": plt,
@@ -191,21 +198,14 @@ def plot_graph():
             "Counter": Counter,
             "datetime": datetime,
         }
-        
-        plt.clf()
 
-        # Executa o código já limpo e seguro
+        plt.clf()
         exec(safe_code, safe_globals)
 
-        # Prepara um buffer em memória para salvar a imagem do gráfico
         buf = io.BytesIO()
         plt.savefig(buf, format='png', bbox_inches='tight')
         buf.seek(0)
-
-        # Codifica a imagem em Base64 para ser enviada via JSON para o frontend
         image_base64 = base64.b64encode(buf.read()).decode('utf-8')
-
-        
         buf.close()
 
         return jsonify({"image_base64": image_base64})
@@ -254,11 +254,8 @@ def filter_patients():
         return jsonify({"error": "Requisição inválida."}), 400
 
     try:
-        # Pega os valores de idade (podem ser nulos ou vazios)
         idade_min_str = data.get('idade_min')
         idade_max_str = data.get('idade_max')
-
-        # Converte para int apenas se houver valor, senão define como None
         idade_min = int(idade_min_str) if idade_min_str else None
         idade_max = int(idade_max_str) if idade_max_str else None
 
@@ -266,11 +263,9 @@ def filter_patients():
         profissionais = data.get('profissionais')
         conjuntos = data.get('conjuntos')
 
-        # Validação: Pelo menos um filtro deve ser preenchido
         if idade_min is None and not convenios and not profissionais and not conjuntos:
             return jsonify({"error": "Por favor, forneça ao menos um critério de busca."}), 400
         
-        # Validação: Se uma idade for preenchida, a outra também deve ser
         if (idade_min is not None and idade_max is None) or (idade_min is None and idade_max is not None):
             return jsonify({"error": "Para filtrar por idade, por favor, preencha tanto a idade mínima quanto a máxima."}), 400
 
@@ -291,13 +286,17 @@ def filter_patients():
             
             filtros_usados = f"({', '.join(filtros_usados_list)})" if filtros_usados_list else ""
 
-            resposta = f"### Pacientes Encontrados {filtros_usados}:\n\n"
-            resposta += "| ID Paciente(MPI) | Idade |\n"
-            resposta += "|----------------------|-------|\n"
+            response_parts = []
+            response_parts.append(f"### Pacientes Encontrados {filtros_usados}:\n\n")
+            response_parts.append("| -ID Paciente(MPI)- | -Idade- | -N° de Eventos- |\n")
+            response_parts.append("|----------------------|-------|---------------|\n")
+            
             for paciente in pacientes_encontrados:
                 patient_id = paciente['id_paciente']
-                
-                resposta += f"| <span class='patient-id-link' data-id='{patient_id}'>{patient_id}</span> | {int(paciente['idade_calculada'])} |\n"
+                linha = f"| <span class='patient-id-link' data-id='{patient_id}'>{patient_id}</span> | {int(paciente['idade_calculada'])} | {paciente['total_eventos']} |\n"
+                response_parts.append(linha)
+            
+            resposta = "".join(response_parts)
         
         return jsonify({"resposta": resposta})
 
