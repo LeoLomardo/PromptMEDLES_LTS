@@ -65,46 +65,57 @@
       div.className = `message ${who}`;
 
       if (who === "bot") {
-        div.innerHTML = marked.parse(text);
-        const codeBlock = div.querySelector('pre code');
+       
+        const parsedHtml = marked.parse(text);
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = parsedHtml; 
+
+        const codeBlock = tempDiv.querySelector('pre code');
+        
         if (codeBlock) {
-          const plotButton = document.createElement('button');
-          plotButton.innerText = 'Gerar Grafico';
-          plotButton.className = 'plot-button'; 
-          
-          const preParent = codeBlock.closest('pre');
-          preParent.insertAdjacentElement('afterend', plotButton);
+           
+            const plotButton = document.createElement('button');
+            plotButton.innerText = 'Gerar Grafico';
+            plotButton.className = 'plot-button'; 
+            
+            plotButton.dataset.code = codeBlock.textContent || '';
+            
+            div.appendChild(plotButton); 
+            
+            plotButton.addEventListener('click', async () => {
+                const code = plotButton.dataset.code; 
+                plotButton.innerText = 'Gerando...';
+                plotButton.disabled = true;
 
-          plotButton.addEventListener('click', async () => {
-              const code = codeBlock.textContent || '';
-              plotButton.innerText = 'Gerando...';
-              plotButton.disabled = true;
-
-              try {
-                  const res = await fetch('/plot', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ code })
-                  });
-                  const data = await res.json();
-                  if (res.ok && data.image_base64) {
-                      const img = document.createElement('img');
-                      img.src = `data:image/png;base64,${data.image_base64}`;
-                      img.alt = "Grafico Gerado";
-                      plotButton.insertAdjacentElement('afterend', img);
-                      plotButton.style.display = 'none'; 
-                  } else {
-                      const errorSpan = document.createElement('span');
-                      errorSpan.style.color = 'red';
-                      errorSpan.innerText = `Erro: ${data.error || 'Nao foi possivel gerar o grafico.'}`;
-                      plotButton.insertAdjacentElement('afterend', errorSpan);
-                      plotButton.innerText = 'Tentar Novamente';
-                      plotButton.disabled = false;
-                  }
-              } catch (error) {
-                  plotButton.innerText = 'Erro de Conexao';
-              }
-          });
+                try {
+                    const res = await fetch('/plot', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.image_base64) {
+                        const img = document.createElement('img');
+                        img.src = `data:image/png;base64,${data.image_base64}`;
+                        img.alt = "Grafico Gerado";
+                        plotButton.insertAdjacentElement('afterend', img);
+                        plotButton.style.display = 'none';
+                    } else {
+                        const errorSpan = document.createElement('span');
+                        errorSpan.style.color = 'red';
+                        errorSpan.innerText = `Erro: ${data.error || 'Nao foi possivel gerar o grafico.'}`;
+                        plotButton.insertAdjacentElement('afterend', errorSpan);
+                        plotButton.innerText = 'Tentar Novamente';
+                        plotButton.disabled = false;
+                    }
+                } catch (error) {
+                    plotButton.innerText = 'Erro de Conexao';
+                    plotButton.disabled = false;
+                    console.error("Erro na requisicao /plot:", error);
+                }
+            });
+        } else {
+            div.innerHTML = parsedHtml; 
         }
       } else {
         const span = document.createElement("span");
