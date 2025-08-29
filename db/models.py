@@ -56,10 +56,9 @@ def busca_conjunto():
             result = conn.execute(query).fetchall()
             return [row[0] for row in result]
 
-#funcao filtra pacientes considerando idade, convenio E/OU profissional responsavel
-def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: list = None, profissionais: list = None, conjuntos: list = None):
+def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: list = None, profissionais: list = None, conjuntos: list = None, termo_busca: str = None):
 
-    if idade_min is None and idade_max is None and not convenios and not profissionais and not conjuntos:
+    if idade_min is None and idade_max is None and not convenios and not profissionais and not conjuntos and not termo_busca:
         return []
 
     with engine.connect() as conn:
@@ -75,6 +74,9 @@ def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: l
         if conjuntos:
             subquery_conditions.append("conjunto = ANY(:conjuntos)")
             params["conjuntos"] = conjuntos
+        if termo_busca:
+            subquery_conditions.append("descricao ILIKE :termo_busca")
+            params["termo_busca"] = f"%{termo_busca}%"
 
         mpi_filter_subquery = ""
         if subquery_conditions:

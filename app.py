@@ -6,6 +6,7 @@ from openai import OpenAI
 from functools import wraps
 from db.models import buscar_jornada_por_id, filtrar_pacientes, buscar_convenios, buscar_profissionais, busca_conjunto
 import os, traceback
+import json
 
 import io
 import base64
@@ -138,6 +139,77 @@ PERGUNTA: {user_prompt}
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500
 
 
+@app.route('/parse-filter', methods=['POST'])
+@login_required
+def parse_natural_language_filter():
+    data = request.get_json()
+    query = data.get('query')
+
+    if not query:
+        return jsonify({"error": "Nenhuma query fornecida."}), 400
+
+    lista_convenios = ", ".join(buscar_convenios())
+    lista_profissionais = ", ".join(buscar_profissionais())
+    lista_conjuntos = ", ".join(busca_conjunto())
+    
+
+    prompt_sistema = f"""
+Voce e um assistente especialista em extrair criterios de busca de um texto em linguagem natural para um sistema de saude.
+Sua unica tarefa e converter o texto do usuario em um objeto JSON.
+O JSON de saida deve conter apenas as seguintes chaves, se encontradas no texto: "idade_min", "idade_max", "convenios", "profissionais", "conjuntos", e "termo_busca".
+
+REGRAS IMPORTANTES:
+- Retorne APENAS o objeto JSON, sem nenhum texto adicional, explicacao ou crases.
+- As chaves "convenios", "profissionais" e "conjuntos" devem SEMPRE ser listas de strings.
+- Se uma idade exata for mencionada (ex: "pacientes com 50 anos"), defina "idade_min" e "idade_max" com o mesmo valor numerico.
+- Se um intervalo for mencionado (ex: "entre 40 e 60 anos"), preencha "idade_min" e "idade_max".
+- Se apenas um limite for mencionado (ex: "acima de 30 anos"), use-o para "idade_min". Se for "abaixo de 50", use para "idade_max".
+- A chave "termo_busca" deve ser uma string contendo o termo clinico a ser buscado (diagnosticos, sintomas, etc.).
+- Se uma informacao nao for mencionada no texto, omita completamente a chave do JSON.
+- Para te ajudar, aqui estao os nomes validos que podem aparecer:
+  - Convenios possiveis: {lista_convenios}
+  - Profissionais possiveis: {lista_profissionais}
+  - Conjuntos possiveis: {lista_conjuntos}
+
+Exemplo 1:
+Texto: "pacientes do Dr. Carlos Alberto com mais de 50 anos"
+JSON: {{"profissionais": ["Dr. Carlos Alberto"], "idade_min": 50}}
+
+Exemplo 2:
+Texto: "me mostre mulheres entre 30 e 40 anos dos convenios Unimed e Amil"
+JSON: {{"idade_min": 30, "idade_max": 40, "convenios": ["Unimed", "Amil"]}}
+
+Exemplo 3:
+Texto: "liste todos os pacientes com diabetes"
+JSON: {{"termo_busca": "diabetes"}}
+
+Exemplo 4:
+Texto: "pacientes do Dr. Carlos com mais de 50 anos e diagnóstico de hipertensao"
+JSON: {{"profissionais": ["Dr. Carlos"], "idade_min": 50, "termo_busca": "hipertensao"}}
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": prompt_sistema},
+                {"role": "user", "content": query}
+            ],
+            temperature=0,
+            response_format={"type": "json_object"}
+        )
+
+        resposta_json_str = response.choices[0].message.content
+        parsed_json = json.loads(resposta_json_str)
+        
+        print(f"DEBUG: JSON retornado pela IA -> {parsed_json}")
+
+        return jsonify(parsed_json)
+
+    except Exception as e:
+        print(f"Erro ao parsear filtro com IA: {traceback.format_exc()}")
+        return jsonify({"error": f"Nao foi possivel interpretar a busca: {str(e)}"}), 500
+
 @app.route('/plot', methods=['POST'])
 @login_required
 def plot_graph():
@@ -148,11 +220,9 @@ def plot_graph():
         return jsonify({"error": "Nenhum codigo fornecido."}), 400
 
     try:
-        # 1) Extrai o primeiro bloco ```python ... ``` ou ``` ... ```
         m = re.search(r"```(?:python)?\s*(.+?)```", raw, flags=re.S|re.I)
-        code = m.group(1).strip() if m else raw  # se não houver crases, usa o texto todo mesmo
+        code = m.group(1).strip() if m else raw
 
-        # 2) Remove imports e chamadas proibidas
         lines = code.splitlines()
         safe_code_lines = []
         for line in lines:
@@ -164,23 +234,18 @@ def plot_graph():
             safe_code_lines.append(line)
         safe_code = "\n".join(safe_code_lines).strip()
 
-        # 3) Se o modelo colou varias instrucoes na mesma linha, adiciona quebras antes de plt.*
-        #    Exemplos: ") plt.", "] plt.", "} plt." ? nova linha antes de plt.
-        safe_code = re.sub(r"\)\s+plt\.", r")\nplt.", safe_code)
-        safe_code = re.sub(r"\]\s+plt\.", r"]\nplt.", safe_code)
-        safe_code = re.sub(r"\}\s+plt\.", r"}\nplt.", safe_code)
-        # Também separa comandos por ';' se houver
+        safe_code = re.sub(r"\)\s*plt\.", r")\nplt.", safe_code)
+        safe_code = re.sub(r"\]\s*plt\.", r"]\nplt.", safe_code)
+        safe_code = re.sub(r"\}\s*plt\.", r"}\nplt.", safe_code)
         if "; " in safe_code:
             safe_code = safe_code.replace("; ", ";\n")
 
-        # 4) Import guard
         original_import = builtins.__import__
         blacklist = ['os', 'sys', 'subprocess', 'shutil', 'requests', 'socket', 'http']
 
         def safe_importer(name, globals=None, locals=None, fromlist=(), level=0):
-            for module_name in blacklist:
-                if name.startswith(module_name):
-                    raise ImportError(f"A importacao do modulo '{name}' nao e permitida.")
+            if any(name.startswith(b) for b in blacklist):
+                raise ImportError(f"A importacao do modulo '{name}' nao e permitida.")
             return original_import(name, globals, locals, fromlist, level)
 
         safe_builtins_dict = {
@@ -214,7 +279,6 @@ def plot_graph():
         print("Erro ao executar codigo do grafico:", traceback.format_exc())
         return jsonify({"error": f"Erro ao gerar o grafico: {str(e)}"}), 500
 
-
 @app.route('/convenios', methods=['GET'])
 @login_required
 def get_convenios():
@@ -235,7 +299,6 @@ def get_profissionais():
         print("Erro ao buscar profissionais:", traceback.format_exc())
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500
 
-
 @app.route('/conjuntos', methods=['GET'])
 @login_required
 def get_conjuntos():
@@ -253,30 +316,46 @@ def filter_patients():
     if not data:
         return jsonify({"error": "Requisição inválida."}), 400
 
+
     try:
-        idade_min_str = data.get('idade_min')
-        idade_max_str = data.get('idade_max')
-        idade_min = int(idade_min_str) if idade_min_str else None
-        idade_max = int(idade_max_str) if idade_max_str else None
+        idade_min, idade_max = None, None
+        
+        idade_min_val = data.get('idade_min')
+        if idade_min_val is not None and str(idade_min_val).isdigit():
+            idade_min = int(idade_min_val)
+
+        idade_max_val = data.get('idade_max')
+        if idade_max_val is not None and str(idade_max_val).isdigit():
+            idade_max = int(idade_max_val)
 
         convenios = data.get('convenios')
         profissionais = data.get('profissionais')
         conjuntos = data.get('conjuntos')
+        termo_busca = data.get('termo_busca')
 
-        if idade_min is None and not convenios and not profissionais and not conjuntos:
-            return jsonify({"error": "Por favor, forneça ao menos um critério de busca."}), 400
+        if idade_min is None and idade_max is None and not convenios and not profissionais and not conjuntos and not termo_busca:
+            return jsonify({"error": "Por favor, forneça ao menos um critério de busca válido."}), 400
         
-        if (idade_min is not None and idade_max is None) or (idade_min is None and idade_max is not None):
-            return jsonify({"error": "Para filtrar por idade, por favor, preencha tanto a idade mínima quanto a máxima."}), 400
+        if ('idade_min' in data or 'idade_max' in data) and not (idade_min is not None and idade_max is not None):
+             if not (str(data.get('idade_min')).isdigit() and str(data.get('idade_max')).isdigit()):
+                 pass 
+             else:
+                 return jsonify({"error": "Para filtrar por idade, por favor, preencha tanto a idade mínima quanto a máxima com valores numéricos."}), 400
 
-        pacientes_encontrados = filtrar_pacientes(idade_min, idade_max, convenios, profissionais, conjuntos)
+        pacientes_encontrados = filtrar_pacientes(
+            idade_min=idade_min,
+            idade_max=idade_max,
+            convenios=convenios,
+            profissionais=profissionais,
+            conjuntos=conjuntos,
+            termo_busca=termo_busca
+        )
         
         if not pacientes_encontrados:
-            resposta = f"Nenhum paciente encontrado com os filtros aplicados."
+            resposta = "Nenhum paciente encontrado com os filtros aplicados."
         else:
-
             total_pacientes = len(pacientes_encontrados)
-            total_eventos_filtrados = sum(paciente['total_eventos'] for paciente in pacientes_encontrados)
+            total_eventos_filtrados = sum(p['total_eventos'] for p in pacientes_encontrados)
             
             filtros_usados_list = []
             if idade_min is not None and idade_max is not None:
@@ -287,18 +366,19 @@ def filter_patients():
                 filtros_usados_list.append(f"médicos: {', '.join(profissionais)}")
             if conjuntos:
                 filtros_usados_list.append(f"conjuntos: {', '.join(conjuntos)}")
+            if termo_busca:
+                 filtros_usados_list.append(f"termo: '{termo_busca}'")
             
             filtros_usados = f"({', '.join(filtros_usados_list)})" if filtros_usados_list else ""
 
-            response_parts = []
-            response_parts.append(f"### Pacientes Encontrados {filtros_usados}:\n\n")
-            
-            response_parts.append(f"**Resumo da Busca:**\n")
-            response_parts.append(f"* **Total de Pacientes Encontrados:** {total_pacientes}\n")
-            response_parts.append(f"* **Total de Eventos (destes pacientes):** {total_eventos_filtrados}\n\n")
-
-            response_parts.append("| ID Paciente | Idade | N° de Eventos |\n")
-            response_parts.append("|----------------------|-------|---------------|\n")
+            response_parts = [
+                f"### Pacientes Encontrados {filtros_usados}:\n\n",
+                f"**Resumo da Busca:**\n",
+                f"* **Total de Pacientes Encontrados:** {total_pacientes}\n",
+                f"* **Total de Eventos (destes pacientes):** {total_eventos_filtrados}\n\n",
+                "| ID Paciente | Idade | N° de Eventos |\n",
+                "|-------------|-------|---------------|\n"
+            ]
             
             for paciente in pacientes_encontrados:
                 patient_id = paciente['id_paciente']
@@ -309,11 +389,10 @@ def filter_patients():
         
         return jsonify({"resposta": resposta})
 
-    except (ValueError, TypeError):
-        return jsonify({"error": "Valores de idade inválidos. Por favor, insira apenas números."}), 400
     except Exception as e:
         print("Erro completo no filtro:", traceback.format_exc())
-        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
+        return jsonify({"error": f"Erro interno ao processar o filtro: {str(e)}"}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port=5000)

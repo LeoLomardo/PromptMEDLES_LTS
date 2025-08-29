@@ -15,14 +15,15 @@
 <body>
 
   <div class="chat-container">
-    <!--<header class="chat-header">
+    <!--DESCOMENTAR TRECHO ABAIXO PARA QUE APARECA O LOGO DA VALSA-->
+   <!-- <header class="chat-header">
       <img src="{{ url_for('static', filename='images/logo1.jpeg') }}" alt="Logo do Chat Saude" class="logo">
       <h1>Chat Saude</h1>
     </header>-->
 
     <div id="messages" class="messages">
       <div class="message bot">
-        <span>Ola! Para consultas detalhadas, insira um ID de paciente e sua pergunta. Para listar pacientes, use os filtros abaixo.</span>
+        <span>Ola! Para consultas detalhadas, insira um ID de paciente e sua pergunta. Para listar pacientes, use os filtros abaixo ou digite sua busca em linguagem natural.</span>
       </div>
     </div>
 
@@ -46,7 +47,7 @@
     <div class="input-container" style="flex-direction: column;">
       <input type="text" id="patientId" placeholder="ID do Paciente (para consultas com IA)" style="margin-bottom: 8px; padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius); width: 100%;" />
       <div style="display: flex; gap: 0.5rem; width: 100%;">
-        <textarea id="prompt" placeholder="Digite sua pergunta para o paciente selecionado..." rows="1" style="flex: 1;"></textarea>
+        <textarea id="prompt" placeholder="Digite sua pergunta ou busca por pacientes..." rows="1" style="flex: 1;"></textarea>
         <button id="sendBtn">Enviar</button>
       </div>
     </div>
@@ -55,45 +56,27 @@
   <script>
     const messagesEl = document.getElementById("messages");
 
+    let choicesConvenio = null;
+    let choicesProfissional = null;
+    let choicesConjunto = null;
+
     function createMessage(text, who = "user") {
       const div = document.createElement("div");
       div.className = `message ${who}`;
 
       if (who === "bot") {
         div.innerHTML = marked.parse(text);
-
-        // 1) Tenta achar <pre><code> renderizado
-        const allBlocks = div.querySelectorAll('pre code');
-        let codeBlock = null;
-
-        if (allBlocks.length) {
-          codeBlock = [...allBlocks].find(cb => cb.classList.contains('language-python')) || allBlocks[0];
-        }
-
-        // 2) Fallback: regex no markdown bruto
-        if (!codeBlock) {
-          const m = text.match(/```(?:python)?\s*([\s\S]*?)```/i);
-          if (m) {
-            const pre = document.createElement('pre');
-            const code = document.createElement('code');
-            code.textContent = m[1].trim();
-            pre.appendChild(code);
-            div.appendChild(pre);
-            codeBlock = code;
-          }
-        }
-
-        // 3) Se achou codigo, cria botao "Gerar Grafico"
+        const codeBlock = div.querySelector('pre code');
         if (codeBlock) {
           const plotButton = document.createElement('button');
           plotButton.innerText = 'Gerar Grafico';
           plotButton.className = 'plot-button'; 
           
-          const preParent = codeBlock.closest('pre') || codeBlock.parentElement;
+          const preParent = codeBlock.closest('pre');
           preParent.insertAdjacentElement('afterend', plotButton);
 
           plotButton.addEventListener('click', async () => {
-              const code = codeBlock.innerText || codeBlock.textContent || '';
+              const code = codeBlock.textContent || '';
               plotButton.innerText = 'Gerando...';
               plotButton.disabled = true;
 
@@ -103,30 +86,22 @@
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ code })
                   });
-                  
                   const data = await res.json();
-
                   if (res.ok && data.image_base64) {
                       const img = document.createElement('img');
                       img.src = `data:image/png;base64,${data.image_base64}`;
                       img.alt = "Grafico Gerado";
-                      img.style.maxWidth = '100%';
-                      img.style.marginTop = '1rem';
-                      
                       plotButton.insertAdjacentElement('afterend', img);
                       plotButton.style.display = 'none'; 
                   } else {
                       const errorSpan = document.createElement('span');
                       errorSpan.style.color = 'red';
-                      errorSpan.style.display = 'block';
-                      errorSpan.style.marginTop = '0.5rem';
                       errorSpan.innerText = `Erro: ${data.error || 'Nao foi possivel gerar o grafico.'}`;
                       plotButton.insertAdjacentElement('afterend', errorSpan);
                       plotButton.innerText = 'Tentar Novamente';
                       plotButton.disabled = false;
                   }
               } catch (error) {
-                  console.error("Erro no fetch do plot:", error);
                   plotButton.innerText = 'Erro de Conexao';
               }
           });
@@ -141,62 +116,101 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    async function executarFiltro(payload) {
+        const loadingDiv = document.createElement("div");
+        loadingDiv.className = "message bot-loading";
+        loadingDiv.innerHTML = "<span>Filtrando...</span>";
+        messagesEl.appendChild(loadingDiv);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+
+        try {
+            const res = await fetch("/filter", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            document.querySelector(".bot-loading")?.remove();
+            if (res.ok) {
+                createMessage(data.resposta, "bot");
+            } else {
+                createMessage(data.error || "Ocorreu um erro no servidor.", "bot");
+            }
+        } catch (error) {
+            document.querySelector(".bot-loading")?.remove();
+            createMessage("Erro ao conectar com o servidor. Verifique sua conexao.", "bot");
+        }
+    }
+
     async function enviarPrompt(texto = null) {
-      const textarea = document.getElementById("prompt");
-      const patientId = document.getElementById("patientId").value.trim();
-      const promptValue = texto !== null ? texto : textarea.value.trim();
+        const textarea = document.getElementById("prompt");
+        const patientId = document.getElementById("patientId").value.trim();
+        const promptValue = texto !== null ? texto : textarea.value.trim();
 
-      if (!promptValue || !patientId) {
-        if (!patientId) alert("Por favor, insira o ID do Paciente.");
-        if (!promptValue) alert("Por favor, digite uma pergunta.");
-        return;
-      }
-
-      textarea.value = "";
-      createMessage(promptValue, "user");
-
-      const loadingDiv = document.createElement("div");
-      loadingDiv.className = "message bot-loading";
-      loadingDiv.innerHTML = "<span>Carregando...</span>";
-      messagesEl.appendChild(loadingDiv);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-
-      try {
-        const res = await fetch("/prompt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: promptValue, patient_id: patientId })
-        });
-
-        const data = await res.json();
-        const loading = document.querySelector(".bot-loading");
-        if (loading) loading.remove();
-
-        if (res.ok) {
-            createMessage(data.resposta || "Nao foi possivel obter uma resposta.", "bot");
-        } else {
-            createMessage(data.error || "Ocorreu um erro no servidor.", "bot");
+        if (!promptValue) {
+            alert("Por favor, digite uma busca ou uma pergunta.");
+            return;
         }
 
-      } catch (error) {
-        const loading = document.querySelector(".bot-loading");
-        if (loading) loading.remove();
-        createMessage("Erro ao conectar com o servidor. Verifique sua conexao.", "bot");
-      }
+        textarea.value = "";
+        createMessage(promptValue, "user");
+
+        if (patientId) {
+            const loadingDiv = document.createElement("div");
+            loadingDiv.className = "message bot-loading";
+            loadingDiv.innerHTML = "<span>Carregando...</span>";
+            messagesEl.appendChild(loadingDiv);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            try {
+                const res = await fetch("/prompt", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt: promptValue, patient_id: patientId })
+                });
+                const data = await res.json();
+                document.querySelector(".bot-loading")?.remove();
+                if (res.ok) {
+                    createMessage(data.resposta || "Nao foi possivel obter uma resposta.", "bot");
+                } else {
+                    createMessage(data.error || "Ocorreu um erro no servidor.", "bot");
+                }
+            } catch (error) {
+                document.querySelector(".bot-loading")?.remove();
+                createMessage("Erro ao conectar com o servidor.", "bot");
+            }
+        } else {
+            const loadingDiv = document.createElement("div");
+            loadingDiv.className = "message bot-loading";
+            loadingDiv.innerHTML = "<span>Interpretando busca...</span>";
+            messagesEl.appendChild(loadingDiv);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            try {
+                const parseRes = await fetch("/parse-filter", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query: promptValue })
+                });
+                const parsedFilters = await parseRes.json();
+                document.querySelector(".bot-loading")?.remove();
+                if (!parseRes.ok) {
+                    throw new Error(parsedFilters.error || "Erro ao interpretar a busca.");
+                }
+                executarFiltro(parsedFilters);
+            } catch (error) {
+                document.querySelector(".bot-loading")?.remove();
+                createMessage(`Erro: ${error.message}`, "bot");
+            }
+        }
     }
 
     async function filtrarPacientes() {
         const idadeMin = document.getElementById("idadeMin").value;
         const idadeMax = document.getElementById("idadeMax").value;
         
-        const conveniosEl = document.getElementById("convenioFilter");
-        const convenios = [...conveniosEl.selectedOptions].map(option => option.value);
 
-        const profissionaisEl = document.getElementById("profissionalFilter");
-        const profissionais = [...profissionaisEl.selectedOptions].map(option => option.value);
-
-        const conjuntosEl = document.getElementById("conjuntoFilter");
-        const conjuntos = [...conjuntosEl.selectedOptions].map(option => option.value);
+        const convenios = choicesConvenio ? choicesConvenio.getValue(true) : [];
+        const profissionais = choicesProfissional ? choicesProfissional.getValue(true) : [];
+        const conjuntos = choicesConjunto ? choicesConjunto.getValue(true) : [];
 
         if (!idadeMin && !idadeMax && convenios.length === 0 && profissionais.length === 0 && conjuntos.length === 0) {
             alert("Por favor, preencha ao menos um filtro para realizar a busca.");
@@ -208,54 +222,20 @@
         }
 
         let userMessageParts = [];
-        if (idadeMin && idadeMax) {
-            userMessageParts.push(`idade entre ${idadeMin} e ${idadeMax} anos`);
-        }
-        if (convenios.length > 0) {
-            userMessageParts.push(`convenios: ${convenios.join(", ")}`);
-        }
-        if (profissionais.length > 0) {
-            userMessageParts.push(`atendidos por: ${profissionais.join(", ")}`);
-        }
-        if (conjuntos.length > 0) {
-            userMessageParts.push(`conjuntos: ${conjuntos.join(", ")}`);
-        }
-        let userMessage = `Buscando pacientes com ${userMessageParts.join(", ")}.`;
-        createMessage(userMessage, "user");
-
-        const loadingDiv = document.createElement("div");
-        loadingDiv.className = "message bot-loading";
-        loadingDiv.innerHTML = "<span>Filtrando...</span>";
-        messagesEl.appendChild(loadingDiv);
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-
-        try {
-            const res = await fetch("/filter", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                    idade_min: idadeMin, 
-                    idade_max: idadeMax,
-                    convenios: convenios,
-                    profissionais: profissionais,
-                    conjuntos: conjuntos 
-                })
-            });
-
-            const data = await res.json();
-            const loading = document.querySelector(".bot-loading");
-            if (loading) loading.remove();
-
-            if (res.ok) {
-                createMessage(data.resposta, "bot");
-            } else {
-                createMessage(data.error || "Ocorreu um erro no servidor.", "bot");
-            }
-        } catch (error) {
-            const loading = document.querySelector(".bot-loading");
-            if (loading) loading.remove();
-            createMessage("Erro ao conectar com o servidor. Verifique sua conexao.", "bot");
-        }
+        if (idadeMin && idadeMax) userMessageParts.push(`idade entre ${idadeMin} e ${idadeMax} anos`);
+        if (convenios.length > 0) userMessageParts.push(`convenios: ${convenios.join(", ")}`);
+        if (profissionais.length > 0) userMessageParts.push(`atendidos por: ${profissionais.join(", ")}`);
+        if (conjuntos.length > 0) userMessageParts.push(`conjuntos: ${conjuntos.join(", ")}`);
+        
+        createMessage(`Buscando pacientes com ${userMessageParts.join(", ")}.`, "user");
+        
+        executarFiltro({ 
+            idade_min: idadeMin, 
+            idade_max: idadeMax,
+            convenios: convenios,
+            profissionais: profissionais,
+            conjuntos: conjuntos 
+        });
     }
 
     async function popularFiltros() {
@@ -272,57 +252,43 @@
         const convenios = await resConv.json();
         const convenioSelect = document.getElementById('convenioFilter');
         convenios.forEach(conv => {
-          const option = document.createElement('option');
-          option.value = conv;
-          option.textContent = conv;
+          const option = new Option(conv, conv);
           convenioSelect.appendChild(option);
         });
-        new Choices(convenioSelect, {
+ 
+        choicesConvenio = new Choices(convenioSelect, {
             ...commonChoiceOptions,
             placeholderValue: 'Selecione convenios',
-            searchPlaceholderValue: 'Pesquisar convenio...'
         });
-      } catch (error) {
-        console.error("Erro ao buscar convenios:", error);
-      }
+      } catch (error) { console.error("Erro ao buscar convenios:", error); }
 
       try {
         const resProf = await fetch('/profissionais');
         const profissionais = await resProf.json();
         const profissionalSelect = document.getElementById('profissionalFilter');
         profissionais.forEach(prof => {
-            const option = document.createElement('option');
-            option.value = prof;
-            option.textContent = prof;
+            const option = new Option(prof, prof);
             profissionalSelect.appendChild(option);
         });
-        new Choices(profissionalSelect, {
+        choicesProfissional = new Choices(profissionalSelect, {
             ...commonChoiceOptions,
             placeholderValue: 'Selecione medicos',
-            searchPlaceholderValue: 'Pesquisar medico...'
         });
-      } catch (error) {
-        console.error("Erro ao buscar profissionais:", error);
-      }
+      } catch (error) { console.error("Erro ao buscar profissionais:", error); }
 
       try {
         const resConj = await fetch('/conjuntos');
         const conjuntos = await resConj.json();
         const conjuntoSelect = document.getElementById('conjuntoFilter');
         conjuntos.forEach(conj => {
-            const option = document.createElement('option');
-            option.value = conj;
-            option.textContent = conj;
+            const option = new Option(conj, conj);
             conjuntoSelect.appendChild(option);
         });
-        new Choices(conjuntoSelect, {
+        choicesConjunto = new Choices(conjuntoSelect, {
             ...commonChoiceOptions,
             placeholderValue: 'Selecione conjuntos',
-            searchPlaceholderValue: 'Pesquisar conjunto...'
         });
-      } catch (error) {
-        console.error("Erro ao buscar conjuntos:", error);
-      }
+      } catch (error) { console.error("Erro ao buscar conjuntos:", error); }
     }
 
     document.getElementById("filterBtn").addEventListener("click", filtrarPacientes);
@@ -340,14 +306,8 @@
         if (event.target.classList.contains('patient-id-link')) {
             const patientId = event.target.dataset.id;
             const patientIdInput = document.getElementById('patientId');
-            
             patientIdInput.value = patientId; 
-            patientIdInput.focus(); 
-            patientIdInput.style.transition = 'box-shadow 0.1s ease-in-out';
-            patientIdInput.style.boxShadow = '0 0 10px rgba(52, 152, 219, 0.7)';
-            setTimeout(() => {
-                patientIdInput.style.boxShadow = '';
-            }, 500);
+            patientIdInput.focus();
         }
     });
 </script>
