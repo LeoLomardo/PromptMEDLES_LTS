@@ -56,9 +56,9 @@ def busca_conjunto():
             result = conn.execute(query).fetchall()
             return [row[0] for row in result]
 
-def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: list = None, profissionais: list = None, conjuntos: list = None, termo_busca: str = None):
+def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: list = None, profissionais: list = None, conjuntos: list = None, termos_busca: list = None):
 
-    if idade_min is None and idade_max is None and not convenios and not profissionais and not conjuntos and not termo_busca:
+    if idade_min is None and idade_max is None and not convenios and not profissionais and not conjuntos and not termos_busca:
         return []
 
     with engine.connect() as conn:
@@ -74,9 +74,17 @@ def filtrar_pacientes(idade_min: int = None, idade_max: int = None, convenios: l
         if conjuntos:
             subquery_conditions.append("conjunto = ANY(:conjuntos)")
             params["conjuntos"] = conjuntos
-        if termo_busca:
-            subquery_conditions.append("descricao ILIKE :termo_busca")
-            params["termo_busca"] = f"%{termo_busca}%"
+        
+        
+        if termos_busca:
+            for i, termo in enumerate(termos_busca):
+                param_name = f"termo_{i}"
+                subquery_conditions.append(f"""
+                    id_paciente IN (
+                        SELECT id_paciente FROM mpiv02.events WHERE descricao ILIKE :{param_name}
+                    )
+                """)
+                params[param_name] = f"%{termo}%"
 
         mpi_filter_subquery = ""
         if subquery_conditions:

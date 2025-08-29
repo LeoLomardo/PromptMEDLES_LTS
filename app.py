@@ -106,21 +106,21 @@ def handle_prompt():
         ])
 
         prompt_completo = f"""
-Voce e um assistente de saude analisando dados clinicos. Com base nas observacoes abaixo do paciente de ID {patient_id}, responda a pergunta do usuario, NAO ESCREVA O NOME DO PACIENTE NUNCA. Escreva o texto com formatacao markdown.
-Apenas quando o usuario explicitamente solicitar um grafico, gere um codigo em Python para plota-lo.
+            Voce e um assistente de saude analisando dados clinicos. Com base nas observacoes abaixo do paciente de ID {patient_id}, responda a pergunta do usuario, NAO ESCREVA O NOME DO PACIENTE NUNCA. Escreva o texto com formatacao markdown.
+            Apenas quando o usuario explicitamente solicitar um grafico, gere um codigo em Python para plota-lo.
 
-Quando (e somente quando) o usuario pedir um grafico, responda **apenas** com UM bloco de codigo Python entre crases triplas, no formato:
-- Gere APENAS o corpo do codigo em Python que prepara o grafico.
-- NUNCA inclua "import" statements.
-- NUNCA chame `plt.show()` ou `plt.savefig()`. O sistema se encarregara de exibir a imagem.
-- As seguintes variaveis ja estao disponiveis: `plt` (para graficos), `Counter` (para contagens), e `datetime` (a classe para manipular datas).
-- Para converter uma string de data, use `datetime.fromisoformat(...)` diretamente.
+            Quando (e somente quando) o usuario pedir um grafico, responda **apenas** com UM bloco de codigo Python entre crases triplas, no formato:
+            - Gere APENAS o corpo do codigo em Python que prepara o grafico.
+            - NUNCA inclua "import" statements.
+            - NUNCA chame `plt.show()` ou `plt.savefig()`. O sistema se encarregara de exibir a imagem.
+            - As seguintes variaveis ja estao disponiveis: `plt` (para graficos), `Counter` (para contagens), e `datetime` (a classe para manipular datas).
+            - Para converter uma string de data, use `datetime.fromisoformat(...)` diretamente.
 
-DADOS DO PACIENTE:
-{contexto}
+            DADOS DO PACIENTE:
+            {contexto}
 
-PERGUNTA: {user_prompt}
-"""
+            PERGUNTA: {user_prompt}
+            """
 
         response = client.chat.completions.create(
             model="gpt-4.1-mini",
@@ -138,7 +138,6 @@ PERGUNTA: {user_prompt}
         print("Erro completo:", traceback.format_exc())
         return jsonify({"error": f"Erro interno: {str(e)}"}), 500
 
-
 @app.route('/parse-filter', methods=['POST'])
 @login_required
 def parse_natural_language_filter():
@@ -152,42 +151,29 @@ def parse_natural_language_filter():
     lista_profissionais = ", ".join(buscar_profissionais())
     lista_conjuntos = ", ".join(busca_conjunto())
     
-
     prompt_sistema = f"""
-Voce e um assistente especialista em extrair criterios de busca de um texto em linguagem natural para um sistema de saude.
-Sua unica tarefa e converter o texto do usuario em um objeto JSON.
-O JSON de saida deve conter apenas as seguintes chaves, se encontradas no texto: "idade_min", "idade_max", "convenios", "profissionais", "conjuntos", e "termo_busca".
+        Voce e um assistente especialista em extrair criterios de busca de um texto em linguagem natural.
+        Sua unica tarefa e converter o texto do usuario em um objeto JSON.
+        O JSON de saida deve conter apenas as seguintes chaves: "idade_min", "idade_max", "convenios", "profissionais", "conjuntos", e "termos_busca".
 
-REGRAS IMPORTANTES:
-- Retorne APENAS o objeto JSON, sem nenhum texto adicional, explicacao ou crases.
-- As chaves "convenios", "profissionais" e "conjuntos" devem SEMPRE ser listas de strings.
-- Se uma idade exata for mencionada (ex: "pacientes com 50 anos"), defina "idade_min" e "idade_max" com o mesmo valor numerico.
-- Se um intervalo for mencionado (ex: "entre 40 e 60 anos"), preencha "idade_min" e "idade_max".
-- Se apenas um limite for mencionado (ex: "acima de 30 anos"), use-o para "idade_min". Se for "abaixo de 50", use para "idade_max".
-- A chave "termo_busca" deve ser uma string contendo o termo clinico a ser buscado (diagnosticos, sintomas, etc.).
-- Se uma informacao nao for mencionada no texto, omita completamente a chave do JSON.
-- Para te ajudar, aqui estao os nomes validos que podem aparecer:
-  - Convenios possiveis: {lista_convenios}
-  - Profissionais possiveis: {lista_profissionais}
-  - Conjuntos possiveis: {lista_conjuntos}
+        REGRAS IMPORTANTES:
+        - Retorne APENAS o objeto JSON, sem nenhum texto adicional.
+        - A chave "termos_busca" deve ser uma LISTA de strings contendo os termos clinicos. Se apenas um termo for encontrado, coloque-o dentro de uma lista.
+        - As chaves "convenios", "profissionais" e "conjuntos" tambem devem ser listas de strings.
+        - Se uma informacao nao for mencionada, omita a chave do JSON.
+        - Para te ajudar, aqui estao nomes validos que podem aparecer:
+        - Convenios: {lista_convenios}
+        - Profissionais: {lista_profissionais}
+        - Conjuntos: {lista_conjuntos}
 
-Exemplo 1:
-Texto: "pacientes do Dr. Carlos Alberto com mais de 50 anos"
-JSON: {{"profissionais": ["Dr. Carlos Alberto"], "idade_min": 50}}
+        Exemplo 1:
+        Texto: "liste os pacientes com diabetes e hipertensao"
+        JSON: {{"termos_busca": ["diabetes", "hipertensao"]}}
 
-Exemplo 2:
-Texto: "me mostre mulheres entre 30 e 40 anos dos convenios Unimed e Amil"
-JSON: {{"idade_min": 30, "idade_max": 40, "convenios": ["Unimed", "Amil"]}}
-
-Exemplo 3:
-Texto: "liste todos os pacientes com diabetes"
-JSON: {{"termo_busca": "diabetes"}}
-
-Exemplo 4:
-Texto: "pacientes do Dr. Carlos com mais de 50 anos e diagnóstico de hipertensao"
-JSON: {{"profissionais": ["Dr. Carlos"], "idade_min": 50, "termo_busca": "hipertensao"}}
-"""
-
+        Exemplo 2:
+        Texto: "pacientes do Dr. Carlos com mais de 50 anos e diagnóstico de pneumonia"
+        JSON: {{"profissionais": ["Dr. Carlos"], "idade_min": 50, "termos_busca": ["pneumonia"]}}
+        """
     try:
         response = client.chat.completions.create(
             model="gpt-4.1-mini",
@@ -203,7 +189,6 @@ JSON: {{"profissionais": ["Dr. Carlos"], "idade_min": 50, "termo_busca": "hipert
         parsed_json = json.loads(resposta_json_str)
         
         print(f"DEBUG: JSON retornado pela IA -> {parsed_json}")
-
         return jsonify(parsed_json)
 
     except Exception as e:
@@ -316,7 +301,6 @@ def filter_patients():
     if not data:
         return jsonify({"error": "Requisição inválida."}), 400
 
-
     try:
         idade_min, idade_max = None, None
         
@@ -331,16 +315,11 @@ def filter_patients():
         convenios = data.get('convenios')
         profissionais = data.get('profissionais')
         conjuntos = data.get('conjuntos')
-        termo_busca = data.get('termo_busca')
+        termos_busca = data.get('termos_busca') 
 
-        if idade_min is None and idade_max is None and not convenios and not profissionais and not conjuntos and not termo_busca:
+        if idade_min is None and idade_max is None and not convenios and not profissionais and not conjuntos and not termos_busca:
             return jsonify({"error": "Por favor, forneça ao menos um critério de busca válido."}), 400
         
-        if ('idade_min' in data or 'idade_max' in data) and not (idade_min is not None and idade_max is not None):
-             if not (str(data.get('idade_min')).isdigit() and str(data.get('idade_max')).isdigit()):
-                 pass 
-             else:
-                 return jsonify({"error": "Para filtrar por idade, por favor, preencha tanto a idade mínima quanto a máxima com valores numéricos."}), 400
 
         pacientes_encontrados = filtrar_pacientes(
             idade_min=idade_min,
@@ -348,7 +327,7 @@ def filter_patients():
             convenios=convenios,
             profissionais=profissionais,
             conjuntos=conjuntos,
-            termo_busca=termo_busca
+            termos_busca=termos_busca # Passando a lista de termos
         )
         
         if not pacientes_encontrados:
@@ -366,8 +345,8 @@ def filter_patients():
                 filtros_usados_list.append(f"médicos: {', '.join(profissionais)}")
             if conjuntos:
                 filtros_usados_list.append(f"conjuntos: {', '.join(conjuntos)}")
-            if termo_busca:
-                 filtros_usados_list.append(f"termo: '{termo_busca}'")
+            if termos_busca:
+                 filtros_usados_list.append(f"termos: {', '.join(termos_busca)}") # Atualizado aqui
             
             filtros_usados = f"({', '.join(filtros_usados_list)})" if filtros_usados_list else ""
 
@@ -386,7 +365,7 @@ def filter_patients():
                 response_parts.append(linha)
             
             resposta = "".join(response_parts)
-        
+
         return jsonify({"resposta": resposta})
 
     except Exception as e:
