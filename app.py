@@ -1,48 +1,63 @@
 #!/usr/bin/env python3
 # -*- coding: ISO-8859-1 -*-
+
 from flask import Flask, request, render_template, jsonify, redirect, url_for, session
 from dotenv import load_dotenv
 from openai import OpenAI
 from functools import wraps
+# Importa funcoes customizadas de acesso ao banco de dados.
 from db.models import buscar_jornada_por_id, filtrar_pacientes, buscar_convenios, buscar_profissionais, busca_conjunto
-import os, traceback
-import json
 
+#Muitos desses import's sao necessarios para gerar os graficos. 
+import os
+import traceback
+import json
 import io
 import base64
 import matplotlib
-matplotlib.use('Agg') # Importante: usa um backend nao-interativo para o Matplotlib
+# Configura o Matplotlib para um backend nao-interativo, essencial para apps web.
+matplotlib.use('Agg') 
 import matplotlib.pyplot as plt
-from collections import Counter # A IA pode usar, entao disponibilizamos
+# Counter e pandas sao disponibilizados para a IA usar na geracao de graficos.
+from collections import Counter
 import pandas as pd
 from datetime import datetime
 import builtins
 import re
+
+
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 app = Flask(__name__)
+# Garante que a sessao nao seja permanente (dura apenas enquanto o navegador estiver aberto).
 app.config['SESSION_PERMANENT'] = False
-
 app.secret_key = os.getenv("SECRET_KEY", "uma-chave-secreta")
-
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Carrega usuarios validos a partir do .env
+# Carrega e valida credenciais de usuario a partir das variaveis de ambiente.
 admin_user = os.getenv("ADMIN_CRED")
 admin_pass = os.getenv("ADMIN_SENHA")
 leo_user = os.getenv("LEO_CRED")
 leo_pass = os.getenv("LEO_SENHA")
+
 if not admin_user or not admin_pass:
     raise RuntimeError("ADMIN_CRED ou ADMIN_SENHA nao estao definidos no .env")
 
+# Dicionario de usuarios validos para autenticacao.
 USERS = {
     admin_user: admin_pass,
     leo_user: leo_pass
 }
 
-# Decorator para proteger rotas
+# --- DECORATORS E AUTENTICACAO ---
+
 def login_required(f):
+    """
+    Decorator para proteger rotas. Verifica se o usuario esta logado na sessao.
+    Se nao estiver, redireciona para a pagina de login.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user' not in session:
@@ -50,31 +65,45 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# --- ROTAS DE AUTENTICACAO E SESSAO ---
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    """
+    Renderiza a pagina de login e processa a tentativa de login.
+    """
     if request.method == 'POST':
         u = request.form['username']
         p = request.form['password']
         if USERS.get(u) == p:
-            session['user'] = u
-            return redirect(url_for('index'))
+            session['user'] = u # Armazena o usuario na sessao.
+            return redirect(url_for('index')) # Redireciona para a pagina principal.
         return render_template('login.html', erro="Usuario ou senha invalidos")
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
+    """
+    Limpa a sessao do usuario e redireciona para a pagina de login.
+    """
     session.clear()
     return redirect(url_for('login'))
 
+# --- ROTAS PRINCIPAIS DA APLICACAO ---
+
 @app.route('/')
-@login_required
+@login_required # Protege esta rota, exigindo login.
 def index():
+    """
+    Renderiza a pagina principal da aplicacao (index.html).
+    """
     return render_template('index.html')
 
-
-#bloquear cache no navegador
 @app.after_request
 def no_cache(response):
+    """
+    Configura os cabecalhos da resposta para impedir o cache no navegador.
+    """
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
@@ -83,6 +112,9 @@ def no_cache(response):
 @app.route('/prompt', methods=['POST'])
 @login_required
 def handle_prompt():
+    """
+    Recebe um prompt e um ID de paciente, busca os dados e pede a IA para responder.
+    """
     data = request.get_json(force=True)
     user_prompt = data.get("prompt", "").strip()
     patient_id = data.get("patient_id", "").strip()
@@ -91,10 +123,12 @@ def handle_prompt():
         return jsonify({"error": "Campos 'prompt' e 'patient_id' sao obrigatorios."}), 400
 
     try:
+        # Busca a jornada do paciente no banco de dados.
         registros = buscar_jornada_por_id(patient_id)
         if not registros:
             return jsonify({"resposta": "Nenhum dado encontrado para o paciente informado."})
 
+        # Limita o contexto para os ultimos 1000 registros para nao exceder o limite de tokens.
         registros = registros[-1000:]
         contexto = "\n\n".join([
             f"[{r['data']}] {r['descricao']} "
@@ -105,6 +139,7 @@ def handle_prompt():
             for r in registros if r.get("descricao")
         ])
 
+        # Monta o prompt completo para a IA, incluindo o contexto e as regras. IMPORTANTE FAZER MAIS TESTES PARA FINE TUNNING DOS RESULTADOS ESPERADOS
         prompt_completo = f"""
             Voce e um assistente de saude analisando dados clinicos. Com base nas observacoes abaixo do paciente de ID {patient_id}, responda a pergunta do usuario, NAO ESCREVA O NOME DO PACIENTE NUNCA. Escreva o texto com formatacao markdown.
             Apenas quando o usuario explicitamente solicitar um grafico, gere um codigo em Python para plota-lo.
@@ -122,13 +157,14 @@ def handle_prompt():
             PERGUNTA: {user_prompt}
             """
 
+        # Envia a requisicao para a API da OpenAI.
         response = client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": "Voce e um assistente medico que analisa prontuarios clinicos e responde perguntas com base em observacaes do paciente."},
                 {"role": "user", "content": prompt_completo}
             ],
-            temperature=0.2
+            temperature=0.2 # Baixa temperatura para respostas mais deterministas.
         )
 
         resposta = response.choices[0].message.content.strip()
@@ -141,16 +177,21 @@ def handle_prompt():
 @app.route('/parse-filter', methods=['POST'])
 @login_required
 def parse_natural_language_filter():
+    """
+    Recebe uma busca em linguagem natural e usa a IA para converte-la em um JSON de filtros.
+    """
     data = request.get_json()
     query = data.get('query')
 
     if not query:
         return jsonify({"error": "Nenhuma query fornecida."}), 400
 
+    # Busca listas de entidades validas para ajudar a IA a identificar os filtros corretos.
     lista_convenios = ", ".join(buscar_convenios())
     lista_profissionais = ", ".join(buscar_profissionais())
     lista_conjuntos = ", ".join(busca_conjunto())
     
+    # Prompt de sistema que instrui a IA a extrair informacoes e retornar um JSON.
     prompt_sistema = f"""
         Voce e um assistente especialista em extrair criterios de busca de um texto em linguagem natural.
         Sua unica tarefa e converter o texto do usuario em um objeto JSON.
@@ -175,13 +216,14 @@ def parse_natural_language_filter():
         JSON: {{"profissionais": ["Dr. Carlos"], "idade_min": 50, "termos_busca": ["pneumonia"]}}
         """
     try:
+        # Envia a requisicao para a IA com o modo de resposta JSON ativado.
         response = client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": prompt_sistema},
                 {"role": "user", "content": query}
             ],
-            temperature=0,
+            temperature=0, # Temperatura 0 para a maxima consistencia.
             response_format={"type": "json_object"}
         )
 
@@ -198,6 +240,10 @@ def parse_natural_language_filter():
 @app.route('/plot', methods=['POST'])
 @login_required
 def plot_graph():
+    """
+    Recebe um codigo Python gerado pela IA, o executa em um ambiente seguro
+    e retorna a imagem de um grafico em formato base64. Importante nao mexer por agora, pois esta funcionando para tudo que foi testado
+    """
     data = request.get_json(force=True)
     raw = (data.get('code') or '').strip()
 
@@ -205,9 +251,12 @@ def plot_graph():
         return jsonify({"error": "Nenhum codigo fornecido."}), 400
 
     try:
+        # Extrai o codigo de dentro de um bloco de markdown (```python ... ```).
         m = re.search(r"```(?:python)?\s*(.+?)```", raw, flags=re.S|re.I)
         code = m.group(1).strip() if m else raw
 
+        # --- SANITIZACAO E SEGURANCA DO CODIGO ---
+        # Remove linhas potencialmente perigosas como 'import', 'plt.show()' e 'plt.savefig()'.
         lines = code.splitlines()
         safe_code_lines = []
         for line in lines:
@@ -219,20 +268,24 @@ def plot_graph():
             safe_code_lines.append(line)
         safe_code = "\n".join(safe_code_lines).strip()
 
+        # Faz pequenas correcoes de formatacao no codigo da IA.
         safe_code = re.sub(r"\)\s*plt\.", r")\nplt.", safe_code)
         safe_code = re.sub(r"\]\s*plt\.", r"]\nplt.", safe_code)
         safe_code = re.sub(r"\}\s*plt\.", r"}\nplt.", safe_code)
         if "; " in safe_code:
             safe_code = safe_code.replace("; ", ";\n")
 
+        # --- AMBIENTE DE EXECUCAO SEGURO (SANDBOX) ---
         original_import = builtins.__import__
         blacklist = ['os', 'sys', 'subprocess', 'shutil', 'requests', 'socket', 'http']
 
+        # Sobrescreve a funcao de importacao para bloquear modulos perigosos.
         def safe_importer(name, globals=None, locals=None, fromlist=(), level=0):
             if any(name.startswith(b) for b in blacklist):
                 raise ImportError(f"A importacao do modulo '{name}' nao e permitida.")
             return original_import(name, globals, locals, fromlist, level)
 
+        # Define quais funcoes built-in estarao disponiveis.
         safe_builtins_dict = {
             "print": print, "len": len, "range": range, "min": min, "max": max,
             "sum": sum, "abs": abs, "round": round, "sorted": sorted, "list": list,
@@ -240,7 +293,8 @@ def plot_graph():
             "float": float, "bool": bool, "enumerate": enumerate, "zip": zip,
             "__import__": safe_importer,
         }
-
+        
+        # Define as variaveis globais que o codigo podera acessar.
         safe_globals = {
             "__builtins__": safe_builtins_dict,
             "plt": plt,
@@ -249,12 +303,15 @@ def plot_graph():
             "datetime": datetime,
         }
 
+        # Limpa qualquer grafico anterior e executa o codigo seguro.
         plt.clf()
         exec(safe_code, safe_globals)
 
+        # Salva o grafico gerado em um buffer de memoria.
         buf = io.BytesIO()
         plt.savefig(buf, format='png', bbox_inches='tight')
         buf.seek(0)
+        # Codifica a imagem em base64 para ser enviada como JSON.
         image_base64 = base64.b64encode(buf.read()).decode('utf-8')
         buf.close()
 
@@ -264,9 +321,14 @@ def plot_graph():
         print("Erro ao executar codigo do grafico:", traceback.format_exc())
         return jsonify({"error": f"Erro ao gerar o grafico: {str(e)}"}), 500
 
+# --- ROTAS DE API PARA DADOS DE FILTROS ---
+
 @app.route('/convenios', methods=['GET'])
 @login_required
 def get_convenios():
+    """
+    Endpoint para fornecer a lista de convenios para o frontend.
+    """
     try:
         convenios = buscar_convenios()
         return jsonify(convenios)
@@ -277,6 +339,9 @@ def get_convenios():
 @app.route('/profissionais', methods=['GET'])
 @login_required
 def get_profissionais():
+    """
+    Endpoint para fornecer a lista de profissionais para o frontend.
+    """
     try:
         profissionais = buscar_profissionais()
         return jsonify(profissionais)
@@ -287,6 +352,9 @@ def get_profissionais():
 @app.route('/conjuntos', methods=['GET'])
 @login_required
 def get_conjuntos():
+    """
+    Endpoint para fornecer a lista de conjuntos para o frontend.
+    """
     try:
         conjuntos = busca_conjunto()
         return jsonify(conjuntos)
@@ -297,11 +365,15 @@ def get_conjuntos():
 @app.route('/filter', methods=['POST'])
 @login_required
 def filter_patients():
+    """
+    Recebe um JSON com criterios de filtro, busca os pacientes e formata a resposta.
+    """
     data = request.get_json()
     if not data:
         return jsonify({"error": "Requisição inválida."}), 400
 
     try:
+        # Extrai e valida os parametros de filtro do JSON recebido.
         idade_min, idade_max = None, None
         
         idade_min_val = data.get('idade_min')
@@ -317,39 +389,43 @@ def filter_patients():
         conjuntos = data.get('conjuntos')
         termos_busca = data.get('termos_busca') 
 
+        # Validacao para garantir que pelo menos um filtro foi fornecido.
         if idade_min is None and idade_max is None and not convenios and not profissionais and not conjuntos and not termos_busca:
             return jsonify({"error": "Por favor, forneça ao menos um critério de busca válido."}), 400
         
-
+        # Chama a funcao do banco de dados para buscar os pacientes.
         pacientes_encontrados = filtrar_pacientes(
             idade_min=idade_min,
             idade_max=idade_max,
             convenios=convenios,
             profissionais=profissionais,
             conjuntos=conjuntos,
-            termos_busca=termos_busca # Passando a lista de termos
+            termos_busca=termos_busca
         )
         
+        # Formata a resposta para o frontend.
         if not pacientes_encontrados:
             resposta = "Nenhum paciente encontrado com os filtros aplicados."
         else:
             total_pacientes = len(pacientes_encontrados)
             total_eventos_filtrados = sum(p['total_eventos'] for p in pacientes_encontrados)
             
+            # Cria um resumo dos filtros utilizados.
             filtros_usados_list = []
             if idade_min is not None and idade_max is not None:
                 filtros_usados_list.append(f"idade entre {idade_min} e {idade_max} anos")
             if convenios:
-                filtros_usados_list.append(f"convênios: {', '.join(convenios)}")
+                filtros_usados_list.append(f"convenios: {', '.join(convenios)}")
             if profissionais:
-                filtros_usados_list.append(f"médicos: {', '.join(profissionais)}")
+                filtros_usados_list.append(f"medicos: {', '.join(profissionais)}")
             if conjuntos:
                 filtros_usados_list.append(f"conjuntos: {', '.join(conjuntos)}")
             if termos_busca:
-                 filtros_usados_list.append(f"termos: {', '.join(termos_busca)}") # Atualizado aqui
+                 filtros_usados_list.append(f"termos: {', '.join(termos_busca)}")
             
             filtros_usados = f"({', '.join(filtros_usados_list)})" if filtros_usados_list else ""
 
+            # Monta a resposta em formato Markdown com uma tabela de resultados.
             response_parts = [
                 f"### Pacientes Encontrados {filtros_usados}:\n\n",
                 f"**Resumo da Busca:**\n",
@@ -361,6 +437,7 @@ def filter_patients():
             
             for paciente in pacientes_encontrados:
                 patient_id = paciente['id_paciente']
+                # Cria um link clicavel no ID do paciente para facilitar a interacao no frontend.
                 linha = f"| <span class='patient-id-link' data-id='{patient_id}'>{patient_id}</span> | {int(paciente['idade_calculada'])} | {paciente['total_eventos']} |\n"
                 response_parts.append(linha)
             
@@ -374,4 +451,5 @@ def filter_patients():
 
 
 if __name__ == '__main__':
+    # Inicia o servidor de desenvolvimento do Flask.
     app.run(debug=True, host="0.0.0.0", port=5000)

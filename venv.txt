@@ -1,5 +1,9 @@
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+Comandos para ativar venv no Windows
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
-. .\.venv\Scripts\Activate.ps1
+    . .\.venv\Scripts\Activate.ps1
 
-. .\.venv_311\Scripts\Activate.ps1
+    . .\.venv_311\Scripts\Activate.ps1
+
+Comandos para ativar venv no Linux:
+    souce .venv/bin/activate

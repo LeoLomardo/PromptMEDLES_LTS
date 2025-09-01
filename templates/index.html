@@ -15,12 +15,6 @@
 <body>
 
   <div class="chat-container">
-    <!--DESCOMENTAR TRECHO ABAIXO PARA QUE APARECA O LOGO DA VALSA-->
-   <!-- <header class="chat-header">
-      <img src="{{ url_for('static', filename='images/logo1.jpeg') }}" alt="Logo do Chat Saude" class="logo">
-      <h1>Chat Saude</h1>
-    </header>-->
-
     <div id="messages" class="messages">
       <div class="message bot">
         <span>Ola! Para consultas detalhadas, insira um ID de paciente e sua pergunta. Para listar pacientes, use os filtros abaixo ou digite sua busca em linguagem natural.</span>
@@ -54,69 +48,102 @@
   </div>
 
   <script>
+    // --- ELEMENTOS GLOBAIS E VARIAVEIS DE ESTADO ---
+
+    // Referencia ao container que exibe as mensagens do chat.
     const messagesEl = document.getElementById("messages");
 
+    // Variaveis para guardar as instancias da biblioteca Choices.js.
+    // Isso permite acessar metodos da biblioteca posteriormente (ex: para obter valores).
     let choicesConvenio = null;
     let choicesProfissional = null;
     let choicesConjunto = null;
 
+    // --- FUNCOES PRINCIPAIS ---
+
+    /**
+     * Cria e adiciona uma nova mensagem na interface do chat.
+     * @param {string} text - O conteudo da mensagem a ser exibida.
+     * @param {string} [who="user"] - O remetente da mensagem ('user' ou 'bot').
+     */
     function createMessage(text, who = "user") {
       const div = document.createElement("div");
       div.className = `message ${who}`;
 
+      // Se a mensagem for do bot, ela pode conter Markdown.
       if (who === "bot") {
+        // Usa a biblioteca 'marked' para converter o texto de Markdown para HTML.
         div.innerHTML = marked.parse(text);
+        
+        // --- LOGICA PARA GERACAO DE GRAFICOS ---
+        // Procura por um bloco de codigo na resposta do bot.
         const codeBlock = div.querySelector('pre code');
         if (codeBlock) {
+          // Se encontrar um bloco de codigo, cria um botao para gerar o grafico.
           const plotButton = document.createElement('button');
           plotButton.innerText = 'Gerar Grafico';
           plotButton.className = 'plot-button'; 
           
+          // Insere o botao logo apos o elemento <pre> que contem o codigo.
           const preParent = codeBlock.closest('pre');
           preParent.insertAdjacentElement('afterend', plotButton);
 
+          // Adiciona um evento de clique ao botao.
           plotButton.addEventListener('click', async () => {
               const code = codeBlock.textContent || '';
               plotButton.innerText = 'Gerando...';
-              plotButton.disabled = true;
+              plotButton.disabled = true; // Desabilita o botao durante o processamento.
 
               try {
+                  // Envia o codigo para o endpoint '/plot' no backend.
                   const res = await fetch('/plot', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ code })
                   });
                   const data = await res.json();
+                  
+                  // Se a requisicao for bem-sucedida e retornar uma imagem.
                   if (res.ok && data.image_base64) {
                       const img = document.createElement('img');
                       img.src = `data:image/png;base64,${data.image_base64}`;
                       img.alt = "Grafico Gerado";
-                      plotButton.insertAdjacentElement('afterend', img);
-                      plotButton.style.display = 'none'; 
+                      plotButton.insertAdjacentElement('afterend', img); // Mostra a imagem.
+                      plotButton.style.display = 'none'; // Esconde o botao.
                   } else {
+                      // Se houver um erro no backend.
                       const errorSpan = document.createElement('span');
                       errorSpan.style.color = 'red';
                       errorSpan.innerText = `Erro: ${data.error || 'Nao foi possivel gerar o grafico.'}`;
                       plotButton.insertAdjacentElement('afterend', errorSpan);
                       plotButton.innerText = 'Tentar Novamente';
-                      plotButton.disabled = false;
+                      plotButton.disabled = false; // Reabilita o botao.
                   }
               } catch (error) {
+                  // Se houver um erro de rede.
                   plotButton.innerText = 'Erro de Conexao';
               }
           });
         }
       } else {
+        // Se a mensagem for do usuario, apenas insere o texto puro.
         const span = document.createElement("span");
         span.innerText = text;
         div.appendChild(span);
       }
       
+      // Adiciona a mensagem criada ao container de mensagens.
       messagesEl.appendChild(div);
+      // Rola a visualizacao para a mensagem mais recente.
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    /**
+     * Envia os dados de filtro para o backend e exibe a resposta.
+     * @param {object} payload - Objeto com os filtros a serem aplicados.
+     */
     async function executarFiltro(payload) {
+        // Mostra uma mensagem de carregamento.
         const loadingDiv = document.createElement("div");
         loadingDiv.className = "message bot-loading";
         loadingDiv.innerHTML = "<span>Filtrando...</span>";
@@ -124,15 +151,16 @@
         messagesEl.scrollTop = messagesEl.scrollHeight;
 
         try {
+            // Faz a requisicao POST para o endpoint '/filter'.
             const res = await fetch("/filter", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
-            document.querySelector(".bot-loading")?.remove();
+            document.querySelector(".bot-loading")?.remove(); // Remove a mensagem de carregamento.
             if (res.ok) {
-                createMessage(data.resposta, "bot");
+                createMessage(data.resposta, "bot"); // Exibe a resposta do bot.
             } else {
                 createMessage(data.error || "Ocorreu um erro no servidor.", "bot");
             }
@@ -142,6 +170,10 @@
         }
     }
 
+    /**
+     * Processa a entrada principal do usuario, decidindo se e uma busca ou uma pergunta de IA.
+     * @param {string|null} [texto=null] - Texto opcional para enviar, se nao for pego do textarea.
+     */
     async function enviarPrompt(texto = null) {
         const textarea = document.getElementById("prompt");
         const patientId = document.getElementById("patientId").value.trim();
@@ -152,9 +184,10 @@
             return;
         }
 
-        textarea.value = "";
-        createMessage(promptValue, "user");
+        textarea.value = ""; // Limpa o campo de entrada.
+        createMessage(promptValue, "user"); // Exibe a mensagem do usuario na tela.
 
+        // Se um ID de paciente foi fornecido, a acao e uma consulta de IA.
         if (patientId) {
             const loadingDiv = document.createElement("div");
             loadingDiv.className = "message bot-loading";
@@ -162,6 +195,7 @@
             messagesEl.appendChild(loadingDiv);
             messagesEl.scrollTop = messagesEl.scrollHeight;
             try {
+                // Envia o prompt e o ID do paciente para o endpoint '/prompt'.
                 const res = await fetch("/prompt", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -179,12 +213,14 @@
                 createMessage("Erro ao conectar com o servidor.", "bot");
             }
         } else {
+            // Se nao ha ID de paciente, a acao e uma busca por linguagem natural.
             const loadingDiv = document.createElement("div");
             loadingDiv.className = "message bot-loading";
             loadingDiv.innerHTML = "<span>Interpretando busca...</span>";
             messagesEl.appendChild(loadingDiv);
             messagesEl.scrollTop = messagesEl.scrollHeight;
             try {
+                // 1. Envia a query para o endpoint '/parse-filter' para ser interpretada.
                 const parseRes = await fetch("/parse-filter", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -195,6 +231,7 @@
                 if (!parseRes.ok) {
                     throw new Error(parsedFilters.error || "Erro ao interpretar a busca.");
                 }
+                // 2. Com os filtros interpretados, chama a funcao para executar a busca.
                 executarFiltro(parsedFilters);
             } catch (error) {
                 document.querySelector(".bot-loading")?.remove();
@@ -203,15 +240,19 @@
         }
     }
 
+    /**
+     * Coleta dados dos filtros estruturados e inicia a busca de pacientes.
+     */
     async function filtrarPacientes() {
         const idadeMin = document.getElementById("idadeMin").value;
         const idadeMax = document.getElementById("idadeMax").value;
         
-
+        // Obtem os valores selecionados dos campos customizados pelo Choices.js.
         const convenios = choicesConvenio ? choicesConvenio.getValue(true) : [];
         const profissionais = choicesProfissional ? choicesProfissional.getValue(true) : [];
         const conjuntos = choicesConjunto ? choicesConjunto.getValue(true) : [];
 
+        // Validacoes basicas da interface.
         if (!idadeMin && !idadeMax && convenios.length === 0 && profissionais.length === 0 && conjuntos.length === 0) {
             alert("Por favor, preencha ao menos um filtro para realizar a busca.");
             return;
@@ -221,6 +262,7 @@
             return;
         }
 
+        // Cria uma mensagem para o usuario resumindo a busca que ele fez.
         let userMessageParts = [];
         if (idadeMin && idadeMax) userMessageParts.push(`idade entre ${idadeMin} e ${idadeMax} anos`);
         if (convenios.length > 0) userMessageParts.push(`convenios: ${convenios.join(", ")}`);
@@ -229,6 +271,7 @@
         
         createMessage(`Buscando pacientes com ${userMessageParts.join(", ")}.`, "user");
         
+        // Chama a funcao que executa o filtro com os dados coletados.
         executarFiltro({ 
             idade_min: idadeMin, 
             idade_max: idadeMax,
@@ -238,7 +281,11 @@
         });
     }
 
+    /**
+     * Busca os dados dos filtros no backend e os popula na tela ao carregar a pagina.
+     */
     async function popularFiltros() {
+      // Configuracoes padrao para todos os selects do Choices.js.
       const commonChoiceOptions = {
           removeItemButton: true,
           placeholder: true,
@@ -248,6 +295,7 @@
       };
       
       try {
+        // Busca e popula os convenios.
         const resConv = await fetch('/convenios');
         const convenios = await resConv.json();
         const convenioSelect = document.getElementById('convenioFilter');
@@ -255,7 +303,7 @@
           const option = new Option(conv, conv);
           convenioSelect.appendChild(option);
         });
- 
+        // Inicializa o Choices.js no select de convenios.
         choicesConvenio = new Choices(convenioSelect, {
             ...commonChoiceOptions,
             placeholderValue: 'Selecione convenios',
@@ -263,6 +311,7 @@
       } catch (error) { console.error("Erro ao buscar convenios:", error); }
 
       try {
+        // Busca e popula os profissionais.
         const resProf = await fetch('/profissionais');
         const profissionais = await resProf.json();
         const profissionalSelect = document.getElementById('profissionalFilter');
@@ -270,6 +319,7 @@
             const option = new Option(prof, prof);
             profissionalSelect.appendChild(option);
         });
+        // Inicializa o Choices.js no select de profissionais.
         choicesProfissional = new Choices(profissionalSelect, {
             ...commonChoiceOptions,
             placeholderValue: 'Selecione medicos',
@@ -277,6 +327,7 @@
       } catch (error) { console.error("Erro ao buscar profissionais:", error); }
 
       try {
+        // Busca e popula os conjuntos.
         const resConj = await fetch('/conjuntos');
         const conjuntos = await resConj.json();
         const conjuntoSelect = document.getElementById('conjuntoFilter');
@@ -284,6 +335,7 @@
             const option = new Option(conj, conj);
             conjuntoSelect.appendChild(option);
         });
+        // Inicializa o Choices.js no select de conjuntos.
         choicesConjunto = new Choices(conjuntoSelect, {
             ...commonChoiceOptions,
             placeholderValue: 'Selecione conjuntos',
@@ -291,23 +343,35 @@
       } catch (error) { console.error("Erro ao buscar conjuntos:", error); }
     }
 
+
+    // --- EVENT LISTENERS (OUVINTES DE EVENTOS) ---
+
+    // Associa a funcao 'filtrarPacientes' ao clique do botao de filtro.
     document.getElementById("filterBtn").addEventListener("click", filtrarPacientes);
+    
+    // Associa a funcao 'enviarPrompt' ao clique do botao de envio.
     document.getElementById("sendBtn").addEventListener("click", () => enviarPrompt());
+    
+    // Permite que o usuario envie a mensagem pressionando 'Enter' no textarea.
     document.getElementById("prompt").addEventListener("keydown", e => {
+      // A condicao !e.shiftKey permite que o usuario quebre linhas com 'Shift + Enter'.
       if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
+        e.preventDefault(); // Evita que uma nova linha seja criada.
         enviarPrompt();
       }
     });
       
+    // Quando o conteudo HTML da pagina estiver totalmente carregado, chama a funcao para popular os filtros.
     document.addEventListener('DOMContentLoaded', popularFiltros);
 
+    // Usa delegacao de eventos para cliques em links de ID de paciente que podem ser adicionados dinamicamente.
     messagesEl.addEventListener('click', (event) => {
+        // Verifica se o elemento clicado tem a classe 'patient-id-link'.
         if (event.target.classList.contains('patient-id-link')) {
-            const patientId = event.target.dataset.id;
+            const patientId = event.target.dataset.id; // Pega o ID do atributo 'data-id'.
             const patientIdInput = document.getElementById('patientId');
-            patientIdInput.value = patientId; 
-            patientIdInput.focus();
+            patientIdInput.value = patientId; // Coloca o ID no campo de input.
+            patientIdInput.focus(); // Coloca o foco no campo para o usuario ver a mudanca.
         }
     });
 </script>

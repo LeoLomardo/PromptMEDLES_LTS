@@ -1,0 +1,28 @@
+
+REALIZAR TESTES AO MUDAR O CODIGO:
+    TESTE 1:
+            918452 - Faca um resumo da ficha medica desse paciente
+
+    TESTE 2:    //esse teste e o que causa mais problemas, ele ainda esta vindo com o import
+            1007951 - Plote um grafico do numero de consultas de um paciente por mes 
+
+    TESTE 3:
+            Buscar filtro por idade do range [16 - 75]
+
+    TESTE 4:
+            Buscar por filtro Bradesco Saude + Agros 
+
+    TESTE 5: 
+            Buscar por paciente atendido pela medica Samara da Silva de Souza Rodrigues, ja q ela tem 28 mil atendimentos
+
+    TESTE 6:
+            Buscando pacientes com convenios: Não Informado, atendidos por: Samara da Silva de Souza Rodrigues.
+
+    TESTE 7:
+            Buscando pacientes com idade entre 10 e 45 anos, convenios: Agros, Bradesco Saúde, Não Informado, atendidos por: Samara da Silva de Souza Rodrigues.
+
+    TESTE 8:
+            1007951 - plote um grafico avaliando a variacao do IMC desse paciente em cada data
+
+    TESTE 9:
+            9866408 - Faca um resumo

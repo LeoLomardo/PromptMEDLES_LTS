@@ -23,11 +23,10 @@ try:
     cur = conn.cursor()
     cur.execute("SELECT NOW();")
     resultado = cur.fetchone()
-    print("🕒 Hora atual no banco:", resultado)
 
     # Encerra conexão
     cur.close()
     conn.close()
 
 except Exception as e:
-    print("❌ Erro ao conectar:", e)
+    print("Erro ao conectar:", e)
